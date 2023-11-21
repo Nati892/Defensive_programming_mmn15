@@ -1,0 +1,15 @@
+﻿  Client.cpp
+  Main.cpp
+C:\Users\Nati\Desktop\Defensive_programming_mmn15\CPPServer\CPPServer\FileUtils.h(9,2): warning C4091: 'typedef ': ignored on left of 'TransferInfo' when no variable is declared
+  (compiling source file 'Client.cpp')
+  
+C:\Users\Nati\Desktop\Defensive_programming_mmn15\CPPServer\CPPServer\Client.cpp(26,8): warning C4101: 'pMeFile': unreferenced local variable
+  ServerConnection.cpp
+C:\Users\Nati\Desktop\Defensive_programming_mmn15\CPPServer\CPPServer\FileUtils.h(9,2): warning C4091: 'typedef ': ignored on left of 'TransferInfo' when no variable is declared
+  (compiling source file 'ServerConnection.cpp')
+  
+C:\Users\Nati\Desktop\Defensive_programming_mmn15\CPPServer\CPPServer\ServerConnection.cpp(60,43): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+  Generating Code...
+x64\Debug\Client.obj : warning LNK4042: object specified more than once; extras ignored
+x64\Debug\ServerConnection.obj : warning LNK4042: object specified more than once; extras ignored
+  CPPServer.vcxproj -> C:\Users\Nati\Desktop\Defensive_programming_mmn15\CPPServer\x64\Debug\CPPServer.exe

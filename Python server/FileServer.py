@@ -1,10 +1,10 @@
 import os
 import socket
 import threading
-
+import Globals
 #Global constants
-LOCAL_CONFIG_PATH = "config.ini"
-DEFAULT_PORT = "1234"
+LOCAL_CONFIG_PATH = "port.info"
+DEFAULT_PORT = "1357"
 HOST="127.0.0.1"
 
 #Config files
@@ -70,10 +70,9 @@ class Server:
                     if not data:
                         print("Connection closed by the client. Goodbye!")#debug
                         break
-                    #else:
-                     #   print("debug: got data:"+str(len(data)))#debug
-                      #  client_socket.send("got".encode() + str(len(data)))
-                   # client_socket.sendall(data)
+                    else:
+                        print("debug: got data:"+str(len(data)))#debug
+                        client_socket.send(("got"+str(len(data))).encode())
             except Exception as e:
                 print(f"Error occurred while handling client: {e}")
             finally:
