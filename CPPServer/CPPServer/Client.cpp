@@ -1,7 +1,7 @@
 #include "Client.h"
 #include "stdio.h"
 #include "FileUtils.h"
-#include "ServerConnection.cpp"
+#include "ServerConnection.h"
 
 #define ME_FILE_PATH "me.info"
 #define TRANSFER_FILE_PATH "transfer.info"
