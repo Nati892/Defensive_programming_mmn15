@@ -13,6 +13,12 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="CRCChecksum">
+      <UniqueIdentifier>{9380810b-e1d1-42b2-8566-67dd8c2aba8b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CryptoWrapper">
+      <UniqueIdentifier>{098e0983-b135-4793-a7b8-d3e37f1e6154}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -33,6 +39,21 @@
     <ClCompile Include="ServerConnection.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="CRCChecksum.cpp">
+      <Filter>CRCChecksum</Filter>
+    </ClCompile>
+    <ClCompile Include="CryptoWrapper\AESWrapper.cpp">
+      <Filter>CryptoWrapper</Filter>
+    </ClCompile>
+    <ClCompile Include="CryptoWrapper\Base64Wrapper.cpp">
+      <Filter>CryptoWrapper</Filter>
+    </ClCompile>
+    <ClCompile Include="CryptoWrapper\RSAWrapper.cpp">
+      <Filter>CryptoWrapper</Filter>
+    </ClCompile>
+    <ClCompile Include="Utils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Main.h">
@@ -40,6 +61,21 @@
     </ClInclude>
     <ClInclude Include="FileUtils.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CRCChecksum.h">
+      <Filter>CRCChecksum</Filter>
+    </ClInclude>
+    <ClInclude Include="Utils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CryptoWrapper\RSAWrapper.h">
+      <Filter>CryptoWrapper</Filter>
+    </ClInclude>
+    <ClInclude Include="CryptoWrapper\AESWrapper.h">
+      <Filter>CryptoWrapper</Filter>
+    </ClInclude>
+    <ClInclude Include="CryptoWrapper\Base64Wrapper.h">
+      <Filter>CryptoWrapper</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

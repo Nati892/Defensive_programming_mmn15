@@ -2,6 +2,7 @@ import os
 import socket
 import threading
 import Globals
+import Utils
 #Global constants
 LOCAL_CONFIG_PATH = "port.info"
 DEFAULT_PORT = "1357"
@@ -46,10 +47,10 @@ class Server:
         server_socket.listen()
         try:
             while True:
-                print("debug: accept")
+                print("debug: accept\n")
                 clientSoc,addr= server_socket.accept()
                 #offload the client to different threads, freeing the main thread to keep accepting new conections
-                clientThread = threading.Thread(target=Server.ClientHandler,args=(clientSoc,1234));
+                clientThread = threading.Thread(target=Server.ClientHandler,args=(clientSoc,));
                 clientThread.start()
         except Exception as e:
             print("\nServer shutting down. Goodbye! " + e.args)
@@ -57,7 +58,7 @@ class Server:
             server_socket.close()
 
 #client handling
-    def ClientHandler(socket,port):
+    def ClientHandler(socket):
         with socket:
             Server.HandleClient(socket)
 
@@ -66,13 +67,14 @@ class Server:
         with client_socket:
             try:
                 while True:
-                    data = client_socket.recv(1024)
+                    data = client_socket.recv(2048)
                     if not data:
                         print("Connection closed by the client. Goodbye!")#debug
                         break
                     else:
                         print("debug: got data:"+str(len(data)))#debug
-                        client_socket.send(("got"+str(len(data))).encode())
+                        Utils.print_dataArr(data)
+              ##          client_socket.send(("got"+str(len(data))).encode())
             except Exception as e:
                 print(f"Error occurred while handling client: {e}")
             finally:
