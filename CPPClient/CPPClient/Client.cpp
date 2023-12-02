@@ -52,7 +52,7 @@ void RunClient()
 			return;
 		}
 		bool SendSuccess = instance->SendBufferToServer(buff, BuffSize);
-		PrintPChar(buff,BuffSize);
+		//PrintPChar(buff,BuffSize);
 		
 	}
 	else

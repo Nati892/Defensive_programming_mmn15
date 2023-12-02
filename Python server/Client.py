@@ -12,5 +12,3 @@ if __name__ == "__main__":
     ServerConfig=FetchConfig()
     FileServer=FileServer.Server(ServerConfig)
     FileServer.Run()
-    
-    
