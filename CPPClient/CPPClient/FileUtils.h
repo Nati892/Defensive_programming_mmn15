@@ -7,7 +7,7 @@
 
 typedef struct TransferInfo {
 	std::string ipAddress;
-	int port;
+	int port=0;
 	std::string ClientName;
 	std::string filePath;
 };

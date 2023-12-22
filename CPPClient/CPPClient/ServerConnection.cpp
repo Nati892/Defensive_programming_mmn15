@@ -4,10 +4,10 @@
 #include <WS2tcpip.h>
 #include <iostream>
 #include <algorithm>
+
 #ifndef  min
 #define min std::min
 #endif //  min
-
 
 bool IsSocketOpen(SOCKET socket);
 bool ServerInstance::StartConnection()
@@ -71,9 +71,11 @@ bool ServerInstance::SendMessageToServer(ClientRequestMessageHeader header, char
 	{
 		SendSuccess = SendBufferToServer(BuffSend, Buffsize);
 	}
-	free(BuffSend);
+	delete[] BuffSend;
 	return SendSuccess;
 }
+
+
 
 bool ServerInstance::SendBufferToServer(const char* BuffToSend, int size)
 {
@@ -96,6 +98,98 @@ bool ServerInstance::SendBufferToServer(const char* BuffToSend, int size)
 	return success;
 }
 
+bool ServerInstance::HandleRecievedMessage()
+{
+
+	return false;
+}
+
+ServerResponseMessage* ServerInstance::RecieveMessageFromServer()
+{
+	// Example of receiving data
+	size_t BytesToRead = 0;
+	int rec_buffer_left_size = BUFFER_SIZE;
+	int rec_buffer_left_index = 0;
+	char receivedBuffer[BUFFER_SIZE];  // Assuming a buffer of size BUFFER_SIZE
+
+	if (this->SavedDataBufferSize > 0)//if there is stored data from last message
+	{
+		std::memcpy(receivedBuffer, this->SavedDataBuffer, SavedDataBufferSize);
+		BytesToRead += SavedDataBufferSize;
+		rec_buffer_left_size -= this->SavedDataBufferSize;
+	}
+	while (BytesToRead < SERVER_MESSAGE_HEADER_SIZE && rec_buffer_left_size>0)//get header size at least, this loop fills up buff until it reaches at least the header size
+	{
+		BytesToRead += recv(*(this->clientSocket), receivedBuffer + (BUFFER_SIZE - rec_buffer_left_size), rec_buffer_left_size, 0);
+		if (BytesToRead < 0)
+		{
+			return nullptr;
+		}
+		rec_buffer_left_size -= BytesToRead;
+	}
+	ServerResponseMessage* header = new ServerResponseMessage;
+
+	if (IsLittleEndian())
+	{
+		header->Version = (char)receivedBuffer[0];
+		std::memcpy(&header->Code, receivedBuffer + 1, sizeof(unsigned short));
+		std::memcpy(&header->PayloadSize, receivedBuffer + 3, sizeof(int));
+	}
+	else//if local machine is big endian
+	{
+		header->Version = receivedBuffer[0];
+		header->Code = (receivedBuffer[2] << 8) | receivedBuffer[1];
+		header->PayloadSize =
+			(unsigned int)
+			((receivedBuffer[6] << 24) |
+				(receivedBuffer[5] << 16) |
+				(receivedBuffer[4] << 8) |
+				receivedBuffer[3]);
+	}
+
+	if (header->PayloadSize <= 0)//if no payload return
+	{
+		header->payload = nullptr;
+		return header;
+	}
+
+	BytesToRead -= SERVER_MESSAGE_HEADER_SIZE;//went 7 steps right in rec buffer
+	int PayloadCopyIndex = 0;
+	char* Payload = nullptr;
+	if (header->PayloadSize > 0)
+	{
+		Payload = new char[header->PayloadSize];
+	}
+	while (PayloadCopyIndex < header->PayloadSize)
+	{
+		int BytesToCopy = header->PayloadSize - min(BytesToRead, header->PayloadSize - PayloadCopyIndex);
+		if (BytesToRead > 0)//if there is something in buffer, read it.
+		{
+			std::memcpy(Payload + PayloadCopyIndex, receivedBuffer + rec_buffer_left_index, BytesToCopy);
+			rec_buffer_left_index += BytesToCopy;
+			BytesToRead -= BytesToCopy;
+			PayloadCopyIndex += BytesToCopy;
+		}
+		else//if buffer is empty then recv and re-loop
+		{
+			BytesToRead = 0;
+			BytesToRead += recv(*(this->clientSocket), receivedBuffer, BUFFER_SIZE, 0);
+			if (BytesToRead < 0)
+			{
+				delete[] Payload;
+				return nullptr;
+			}
+			rec_buffer_left_index = 0;
+		}
+	}
+	if (BytesToRead > 0)//if there is still data from the next message, store it and use it next time
+	{
+		std::memcpy(this->SavedDataBuffer, receivedBuffer + rec_buffer_left_index, BytesToRead);
+		this->SavedDataBufferSize = BytesToRead;
+	}
+	return nullptr;
+}
+
 bool IsSocketOpen(SOCKET socket) {
 	int error = 0;
 	socklen_t len = sizeof(error);
@@ -111,13 +205,13 @@ bool IsSocketOpen(SOCKET socket) {
 
 char* ClientRequestMessageHeader::SerializeToBuffer(const char* Payload, int buffsize, int* RetSize)
 {
-	int NewBuffSize = sizeof(this->ClientID)+sizeof(this->Code)+sizeof(this->version)+sizeof(this->PayloadSize) + PayloadSize;
+	int NewBuffSize = sizeof(this->ClientID) + sizeof(this->Code) + sizeof(this->version) + sizeof(this->PayloadSize) + PayloadSize;
 	char* buffer = new char[NewBuffSize];
 	int i = 0;
 	char* TmpBuff;
 
 	//serialize and memcpy the ClientId field
-	std::memcpy(buffer, ClientID, sizeof(ClientID));
+	std::memcpy(buffer, ClientID, CLIENT_ID_LENGTH);
 	i += sizeof(ClientID);
 
 	//no need to serizlize, memcpy the version field
@@ -137,7 +231,7 @@ char* ClientRequestMessageHeader::SerializeToBuffer(const char* Payload, int buf
 	i += sizeof(PayloadSize);
 
 
-	*RetSize = i+PayloadSize;//return the size of buffer
+	*RetSize = i + PayloadSize;//return the size of buffer
 	int CopySize = min(PayloadSize, buffsize);
 	std::memcpy(buffer + i, Payload, CopySize);
 	i += CopySize;

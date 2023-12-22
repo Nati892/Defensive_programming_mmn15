@@ -3,11 +3,6 @@
 #include "FileUtils.h"
 
 
-
-void ReadTransferInfo();
-FILE* ReadMeData();
-
-
 void RunClient()
 {
 	TransferInfo tInfo;
@@ -30,7 +25,7 @@ void RunClient()
 		}
 	}
 	tInfo = parseTransferInfoFile(TRANSFER_FILE_PATH);
-
+	//create server isntance based on files
 	instance = new ServerInstance(tInfo);
 	if (!instance->StartConnection())
 	{
@@ -52,8 +47,17 @@ void RunClient()
 			return;
 		}
 		bool SendSuccess = instance->SendBufferToServer(buff, BuffSize);
-		//PrintPChar(buff,BuffSize);
+		delete buff;
+		ServerResponseMessage* rec_msg = instance->RecieveMessageFromServer();
+		if (rec_msg == nullptr || rec_msg->Code != register_success_response )
+		{
+			//todo failed to register bye bye
+		std::cerr << ("debug: register failed!") << std::endl;;
+		}
+		std::cerr << ("debug: register success!") << std::endl;;
 		
+		//PrintPChar(buff,BuffSize);//todo delete 
+		//char*
 	}
 	else
 	{//attempt re-register

@@ -1,8 +1,10 @@
 import struct
 import uuid
 from enum import IntEnum
-
+import Globals
 CLIENT_MESSAGE_HEADER_SIZE =23
+SERVER_MESSAGE_HEADER_SIZE =7
+
 class ClientMessage:
     ID:uuid
     Version:int=0
@@ -13,7 +15,7 @@ class ClientMessage:
     def __init__(self,binary_data):
         # Ensure the length of the binary data is 23 bytes
         if len(binary_data) != 23:
-            raise ValueError("Invalid length of binary data")
+            raise ValueError("Invalid length of binary data")#todo add docu about this and make sure use of try except 
 
         # Unpack the binary data using struct format
         unpacked_data = struct.unpack("<16s B H I", binary_data)
@@ -27,8 +29,27 @@ class ClientMessage:
         self.ID=parsed_id
         self.Version=version
         self.code=code
-        self.Payload=size
+        self.PayloadSize=size
 
+class ServerMessage:
+    Version:int=0
+    code:int=0
+    PayloadSize:int=0
+    Payload:bytes=0
+    def __init__(self,code,payloadSize,payload):
+        self.Version=Globals.SERVER_VERSION
+        self.code=code
+        self.PayloadSize=payloadSize
+        if payloadSize > 0 and payload is not None and len(payload)>=payloadSize :
+            self.Payload=payload
+    
+    def ToBuffer(self):
+        packed_data:bytes = struct.pack("<B H I", self.Version,self.code,self.PayloadSize)
+        if(self.PayloadSize>0):
+            packed_data=packed_data+self.Payload[:min(len(self.Payload,self.payloadsize))]
+        return packed_data
+    
+    
 class ServerMessageType(IntEnum):
     register_success_response = 2100
     register_failure_response = 2101

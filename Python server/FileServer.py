@@ -3,6 +3,7 @@ import socket
 import threading
 from Messages import *
 import Utils
+import DBWrapper
 
 #Global constants
 LOCAL_CONFIG_PATH = "port.info"
@@ -63,9 +64,9 @@ class Server:
 
 #client handling
 
-    def ClientHandler(socket):
-        with socket:
-            Server.StartConversation(socket)
+    def ClientHandler(soc:socket):
+        with soc:
+            Server.StartConversation(soc)
 
     def StartConversation(client_socket):
         print("handler started")
@@ -85,8 +86,32 @@ class ClientContext:
 def HandleClientRegistration(context:ClientContext):
     registered:bool=False
     Messsage=RecieveMesssage(context)
-
+    if Messsage.code == ClientMessageType.register_request:
+        if CanRegisterClient(Messsage.Payload):
+            RegisterClient(Messsage.Payload)
+        else:
+            SendMessage(context,ServerMessageType.register_failure_response,0,None) 
+        pass
+    elif Messsage.code == ClientMessageType.reconnect_request:
+        pass
+    else:
+        SendMessage(context,ServerMessageType.general_error,0,None)
+    
     return registered
+
+#registraition
+def CanRegisterClient(ClientNameString):
+    CanConnect:bool = False
+    db_instance =DBWrapper.ThreadSafeSQLite()
+    CanConnect=not db_instance.user_name_exists(ClientNameString)
+    return CanConnect
+
+def RegisterClient(ClientNameString):
+    db_instance =DBWrapper.ThreadSafeSQLite()
+    c_uuid=db_instance.create_user(ClientNameString)
+    
+    return c_uuid
+
 
 # recieve message in context
 def RecieveMesssage(context:ClientContext):
@@ -111,41 +136,53 @@ def RecieveMesssage(context:ClientContext):
         
         context.BufferedData = context.BufferedData + data_rec
 
-    ClientMessage.Payload=context.BufferedData[ClientMessage.PayloadSize:]
-    context.BufferedData[:ClientMessage.Payload]
-        
+    # Extract the payload
+    Request.Payload = context.BufferedData[:Request.PayloadSize]
+    # Remove the extracted bytes from the buffer
+    context.BufferedData = context.BufferedData[Request.PayloadSize:]
+    return Request
 
-#data recieve and send
+#send message to client via context
+def SendMessage(context:ClientContext,MessageCode,bufferSize,buffer):
+    Message:ServerMessage=ServerMessage(MessageCode,bufferSize,buffer)
+    buffer:bytes= Message.ToBuffer()
+    SendData(context.soc,buffer)
+    pass
+    
+# data receive
 def ReceiveData(soc):
-    with soc:
-        try:
-            data = soc.recv(1024)
-            if not data:
-                print("Connection closed by the client. Goodbye!")#debug
-                return (b"",0)
-            else:
-                if len(data)>0:
-                    return (data, len(data))
-                    print("debug: got data:"+str(len(data)))#debug
-                    Utils.print_dataArr(data)#debug
-        except Exception as e:
-            print(f"Error occurred while handling client: {e}")
-            return (b"",0)
-
-
-def SendData(soc,data):
-    with soc:
-        try:
-            if not data or len(data)==0:
-                return False                    
-            if not isinstance(data,bytes):
-                EncodedData= data.encode()
-            else:
-                EncodedData=data
-            soc.send(EncodedData)
-            return True
-        except Exception as e:
-            print(f"Error occurred while handling client: {e}")
-        finally:
-            print(f"Connection closed. Stay cool!")
+    try:
+        data = soc.recv(1024)
+        if not data:
+            print("Connection closed by the client. Goodbye!")  # debug
+            return b"", 0
+        else:
+            if len(data) > 0:
+                print("debug: got data:" + str(len(data)))  # debug
+                Utils.print_dataArr(data)  # debug
+                return data, len(data)
+    except Exception as e:
+        print(f"Error occurred while handling client: {e}")
+        return b"", 0
+    
+# data send
+def SendData(soc, data):
+    try:
+        if not data or len(data) == 0:
             return False
+
+        if not isinstance(data, bytes):
+            encoded_data = data.encode()
+        else:
+            encoded_data = data
+
+        with soc:
+            print("debug len:")
+            print ( len(encoded_data))
+            soc.send(encoded_data)
+
+        return True
+
+    except Exception as e:
+        print(f"Error occurred while handling client: {e}")
+        return False
