@@ -1,10 +1,5 @@
 #include "FileUtils.h"
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <vector>
-#include <sys/stat.h>
-#include <filesystem>
+
 
 
 std::vector<std::string> split(const std::string& s, char delimiter);
@@ -86,7 +81,7 @@ MeInfo parseMeInfoFile(const std::string& filename) {
 		Name = "";
 	}
 	meInfo.Name = Name;
-	meInfo.AsciiIdentifier = Uid;
+	meInfo.HexStrIdentifier = Uid;
 	meInfo.Privkey = PrivKey;
 	return meInfo;
 }
@@ -178,4 +173,44 @@ bool writeToFile(std::ofstream* fileStream, const std::string& content, bool sho
 		std::cerr << "Invalid file stream or file not open." << std::endl;//log
 	}
 	return WriteSuccess;
+}
+
+
+std::string MeInfo::AsciiIdentifier() {
+	auto str= hexStringToAscii(HexStrIdentifier.c_str());
+	return str;
+}
+
+//writes me info struct to file
+bool MeInfo::SaveFile()
+{
+	bool write_success = false;
+	std::ofstream file(ME_FILE_PATH);
+	if (file.is_open()) { // Checking if the file is open
+		file << Name<<std::endl<<HexStrIdentifier<<std::endl<<Privkey; // Writing content to the file
+		file.close(); // Closing the file stream
+		std::cerr << "Content written to " << ME_FILE_PATH << " successfully." << std::endl;
+		write_success = true;
+	}
+	else {
+		std::cerr << "Unable to create or open the file." << std::endl;
+	}
+	return write_success;
+}
+
+//writes key info struct to file
+bool KeyInfo::SaveFile()
+{
+	bool write_success = false;
+	std::ofstream file(PRIV_KEY_PATH);
+	if (file.is_open()) { // Checking if the file is open
+		file << AESKey; // Writing content to the file
+		file.close(); // Closing the file stream
+		std::cerr << "Content written to " << ME_FILE_PATH << " successfully." << std::endl;
+		write_success = true;
+	}
+	else {
+		std::cerr << "Unable to create or open the file." << std::endl;
+	}
+	return write_success;
 }

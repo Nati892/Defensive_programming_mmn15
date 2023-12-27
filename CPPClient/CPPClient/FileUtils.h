@@ -1,5 +1,12 @@
 #pragma once
 #include <string>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <sys/stat.h>
+#include <filesystem>
+#include "Utils.h"
 #define ME_FILE_PATH "me.info"
 #define TRANSFER_FILE_PATH "transfer.info"
 #define PRIV_KEY_PATH "priv.key"
@@ -7,18 +14,21 @@
 
 typedef struct TransferInfo {
 	std::string ipAddress;
-	int port=0;
+	int port = 0;
 	std::string ClientName;
 	std::string filePath;
 };
 
 typedef struct MeInfo {
 	std::string Name;
-	std::string AsciiIdentifier;
+	std::string HexStrIdentifier;
 	std::string Privkey;
+	std::string AsciiIdentifier();
+	bool SaveFile();
 };
 typedef struct KeyInfo {
-	std::string AESKEy;
+	std::string AESKey;
+	bool SaveFile();
 };
 
 

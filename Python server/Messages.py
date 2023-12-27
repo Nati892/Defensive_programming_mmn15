@@ -2,7 +2,7 @@ import struct
 import uuid
 from enum import IntEnum
 import Globals
-CLIENT_MESSAGE_HEADER_SIZE =23
+
 SERVER_MESSAGE_HEADER_SIZE =7
 
 class ClientMessage:
@@ -46,7 +46,7 @@ class ServerMessage:
     def ToBuffer(self):
         packed_data:bytes = struct.pack("<B H I", self.Version,self.code,self.PayloadSize)
         if(self.PayloadSize>0):
-            packed_data=packed_data+self.Payload[:min(len(self.Payload,self.payloadsize))]
+            packed_data=packed_data+self.Payload[:min(len(self.Payload),self.PayloadSize)]
         return packed_data
     
     

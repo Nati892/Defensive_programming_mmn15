@@ -4,7 +4,7 @@
 #define SERVER_MESSAGE_HEADER_SIZE 7
 #define CLIENT_ID_LENGTH 16
 #define BUFFER_SIZE 1024
-
+#define MIN_2102_PAYLOAD_SIZE 32
 enum ServerMessageType :__int16
 {
 	register_success_response = 2100,
@@ -29,7 +29,7 @@ enum ClientMessageType :__int16
 };
 
 struct ClientRequestMessageHeader {
-	unsigned char ClientID[16];
+	unsigned char ClientID[CLIENT_ID_LENGTH];
 	unsigned char version;
 	unsigned short Code;
 	unsigned int PayloadSize;
@@ -72,3 +72,7 @@ public:
 	ServerResponseMessage* RecieveMessageFromServer();
 	bool HandleRecievedMessage();
 };
+
+
+bool IsSocketOpen(SOCKET socket);
+bool compareClientId(MeInfo MInfo, char* buff);

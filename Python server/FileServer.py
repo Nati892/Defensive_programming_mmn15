@@ -1,10 +1,11 @@
 import os
 import socket
 import threading
+from Client import ClientContext
 from Messages import *
 import Utils
 import DBWrapper
-
+import CryptoWrapper
 #Global constants
 LOCAL_CONFIG_PATH = "port.info"
 DEFAULT_PORT = "1357"
@@ -73,26 +74,45 @@ class Server:
         Context = ClientContext(client_socket)
         Context.soc=client_socket
         IsClientRegistered=HandleClientRegistration(Context)
+        pass
 
-#holds context for conversation with client
-class ClientContext:
-        soc:socket
-        Authenticated:bool = False
-        BufferedData = b""
-
-        def __init__(self,soc:socket):
-            self.soc=soc
-
+#this func makes sure the client is registered either first time registration or reconnection
 def HandleClientRegistration(context:ClientContext):
     registered:bool=False
-    Messsage=RecieveMesssage(context)
-    if Messsage.code == ClientMessageType.register_request:
+    Messsage=ReceiveMesssage(context)
+    if Messsage is None:
+         return False
+    if Messsage.code == ClientMessageType.register_request:#if client want to register
         if CanRegisterClient(Messsage.Payload):
-            RegisterClient(Messsage.Payload)
+            ClientId=RegisterClient(Messsage.Payload)
+            if(ClientId==None):
+                SendMessage(context,ServerMessageType.general_error,0,None)
+            else:#successful registration
+                payload:bytes= ClientId
+                SendMessage(context,ServerMessageType.register_success_response,len(payload),payload)
+                
+                msg =ReceiveMesssage(context)
+                if msg.code!=ClientMessageType.send_public_key_request:
+                    SendMessage(context,ServerMessageType.general_error,0,None)
+                    return
+                if HandlePubKey(context,msg)==False:# try to handle pub-key
+                    return False;
+                
+                AESKey = CryptoWrapper.random_aes_key()#create aes key 
+                db_instance =DBWrapper.ThreadSafeSQLite()
+                db_instance.set_user_aes_key(msg.ID, AESKey)
+                #save in db the aes key
+                
+                #encrypt key and send it
+                encryptedAESKey=CryptoWrapper.rsa_encryption( context.PubKey,AESKey)
+                payload=ClientId+encryptedAESKey
+                SendMessage(context,ServerMessageType.pub_rsa_received_sending_encrypted_aes,len(payload),payload)
+                
+                debugpoint=False;
         else:
             SendMessage(context,ServerMessageType.register_failure_response,0,None) 
         pass
-    elif Messsage.code == ClientMessageType.reconnect_request:
+    elif Messsage.code == ClientMessageType.reconnect_request:#if client wants to reconnect
         pass
     else:
         SendMessage(context,ServerMessageType.general_error,0,None)
@@ -112,12 +132,26 @@ def RegisterClient(ClientNameString):
     
     return c_uuid
 
+#pubkey  handling
+def HandlePubKey(context:ClientContext,msg:ClientMessage):
+    res:bool=False
+    if(msg.PayloadSize>=ClientContext.SEND_PUB_KEY_PAYLOAD_SIZE):
+        db_instance =DBWrapper.ThreadSafeSQLite()
+        is_there_user=db_instance.user_exists(msg.Payload[:ClientContext.NAME_SIZE],msg.ID)
+        if(is_there_user==False):
+            return False
+        ClientContext.PubKey=msg.Payload[ClientContext.NAME_SIZE:]
+        db_instance.set_user_pub_key(msg.ID, context.PubKey)
+        return True
+    else:
+        res=False
+    return res
 
 # recieve message in context
-def RecieveMesssage(context:ClientContext):
+def ReceiveMesssage(context:ClientContext):
     
     #recieve 23 first bytes to build message header
-    while len(context.BufferedData)<CLIENT_MESSAGE_HEADER_SIZE:
+    while len(context.BufferedData)<ClientContext.CLIENT_MESSAGE_HEADER_SIZE:
         (data_rec, data_rec_len) = ReceiveData(context.soc)
         if data_rec_len==0:
             return None
@@ -125,8 +159,8 @@ def RecieveMesssage(context:ClientContext):
         context.BufferedData = context.BufferedData + data_rec
     
     #build message header
-    Request:ClientMessage=ClientMessage(context.BufferedData[:CLIENT_MESSAGE_HEADER_SIZE])
-    context.BufferedData=context.BufferedData[CLIENT_MESSAGE_HEADER_SIZE:]
+    Request:ClientMessage=ClientMessage(context.BufferedData[:ClientContext.CLIENT_MESSAGE_HEADER_SIZE])
+    context.BufferedData=context.BufferedData[ClientContext.CLIENT_MESSAGE_HEADER_SIZE:]
     
     #handle payload
     while Request.PayloadSize>len(context.BufferedData):
@@ -176,11 +210,13 @@ def SendData(soc, data):
         else:
             encoded_data = data
 
-        with soc:
+        try:
             print("debug len:")
             print ( len(encoded_data))
             soc.send(encoded_data)
-
+        except:
+            print("failed to send message to scket, socket closed")
+            return False
         return True
 
     except Exception as e:

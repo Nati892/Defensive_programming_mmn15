@@ -9,7 +9,7 @@
 #define min std::min
 #endif //  min
 
-bool IsSocketOpen(SOCKET socket);
+
 bool ServerInstance::StartConnection()
 {
 	bool ConnectSuccess = false;
@@ -154,15 +154,17 @@ ServerResponseMessage* ServerInstance::RecieveMessageFromServer()
 	}
 
 	BytesToRead -= SERVER_MESSAGE_HEADER_SIZE;//went 7 steps right in rec buffer
+	rec_buffer_left_index += SERVER_MESSAGE_HEADER_SIZE;
 	int PayloadCopyIndex = 0;
 	char* Payload = nullptr;
 	if (header->PayloadSize > 0)
 	{
 		Payload = new char[header->PayloadSize];
+		header->payload = Payload;
 	}
 	while (PayloadCopyIndex < header->PayloadSize)
 	{
-		int BytesToCopy = header->PayloadSize - min(BytesToRead, header->PayloadSize - PayloadCopyIndex);
+		int BytesToCopy = min(BytesToRead, header->PayloadSize - PayloadCopyIndex);
 		if (BytesToRead > 0)//if there is something in buffer, read it.
 		{
 			std::memcpy(Payload + PayloadCopyIndex, receivedBuffer + rec_buffer_left_index, BytesToCopy);
@@ -177,6 +179,7 @@ ServerResponseMessage* ServerInstance::RecieveMessageFromServer()
 			if (BytesToRead < 0)
 			{
 				delete[] Payload;
+				delete header;
 				return nullptr;
 			}
 			rec_buffer_left_index = 0;
@@ -187,7 +190,7 @@ ServerResponseMessage* ServerInstance::RecieveMessageFromServer()
 		std::memcpy(this->SavedDataBuffer, receivedBuffer + rec_buffer_left_index, BytesToRead);
 		this->SavedDataBufferSize = BytesToRead;
 	}
-	return nullptr;
+	return header;
 }
 
 bool IsSocketOpen(SOCKET socket) {
