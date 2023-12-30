@@ -111,13 +111,15 @@ def HandleClientRegistration(context:ClientContext):
             SendMessage(context,ServerMessageType.register_failure_response,0,None) 
     elif Messsage.code == ClientMessageType.reconnect_request:#if client wants to reconnect
         if CanReconnectClient(Messsage.Payload,Messsage.ID):
+            context.ID=Messsage.ID
+            context.PubKey= GetPubKey(context)
             AESKey = CryptoWrapper.random_aes_key()#create aes key 
             #save in db the aes key
             db_instance =DBWrapper.ThreadSafeSQLite()
             db_instance.set_user_aes_key(Messsage.ID, AESKey)
             #encrypt key and send it
             encryptedAESKey=CryptoWrapper.rsa_encryption( context.PubKey,AESKey)
-            payload=ClientId+encryptedAESKey
+            payload=context.ID.bytes+encryptedAESKey
             SendMessage(context,ServerMessageType.reconnect_allowed_sending_aes_key,len(payload),payload)
         else:
             SendMessage(context,ServerMessageType.reconnect_denied,0,None)
@@ -137,7 +139,7 @@ def CanRegisterClient(ClientNameString:bytes):
 def CanReconnectClient(ClientNameString:bytes,cid:uuid):
     CanConnect:bool = False
     db_instance =DBWrapper.ThreadSafeSQLite()
-    CanConnect=not db_instance.rsa_for_user_exists(ClientNameString,cid)
+    CanConnect= db_instance.rsa_for_user_exists(ClientNameString,cid)
     return CanConnect
 
 def RegisterClient(ClientNameString:bytes):
@@ -161,7 +163,11 @@ def HandlePubKey(context:ClientContext,msg:ClientMessage):
         res=False
     return res
 
-# recieve message in context
+def GetPubKey(context:ClientContext):
+    db_instance =DBWrapper.ThreadSafeSQLite()
+    return db_instance.get_user_pub_key(context)
+    
+    # recieve message in context
 def ReceiveMesssage(context:ClientContext):
     
     #recieve 23 first bytes to build message header

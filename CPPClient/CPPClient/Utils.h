@@ -9,3 +9,4 @@ char* ConvertInt32ToEndian(__int32 value);
 void PrintPChar(char* arr, int size);
 std::string AsciiToHexStr(char* uuid);
 std::string hexStringToAscii(const char* hexString);
+std::string trim(const std::string& str);

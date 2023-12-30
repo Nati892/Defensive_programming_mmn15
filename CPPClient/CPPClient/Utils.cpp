@@ -132,3 +132,15 @@ std::string hexStringToAscii(const char* hexString) {
 
 	return result;
 }
+
+//custom trim func
+std::string trim(const std::string& str) {
+	size_t first = str.find_first_not_of(" \t\n\r");
+	size_t last = str.find_last_not_of(" \t\n\r");
+
+	if (first == std::string::npos || last == std::string::npos) {
+		return ""; // Empty or whitespace-only string
+	}
+
+	return str.substr(first, last - first + 1);
+}

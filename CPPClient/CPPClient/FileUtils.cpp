@@ -1,9 +1,10 @@
 #include "FileUtils.h"
-
-
+#include "CryptoWrapper/Base64Wrapper.h"
 
 std::vector<std::string> split(const std::string& s, char delimiter);
+std::vector<std::string> splitFirstTokens(const std::string& s, char delimiter, int amount);
 std::string GetFileData(std::string fname, size_t* buffer_size);
+
 TransferInfo parseTransferInfoFile(const std::string& filename) {
 	TransferInfo transferInfo;
 
@@ -49,8 +50,6 @@ TransferInfo parseTransferInfoFile(const std::string& filename) {
 	file.close();
 	return transferInfo;
 }
-std::ofstream* CreateFile(const std::string& path, bool returnOpenFile);
-bool writeToFile(std::ofstream* fileStream, const std::string& content, bool shouldCloseFile);
 
 MeInfo parseMeInfoFile(const std::string& filename) {
 	MeInfo meInfo;
@@ -70,11 +69,12 @@ MeInfo parseMeInfoFile(const std::string& filename) {
 	std::vector<std::string> MeLines = split(data, '\n');
 	if (MeLines.size() >= 3)
 	{
-		Name = MeLines[0];
-		Uid = MeLines[1];
-		PrivKey = MeLines[2];
+		Name = trim(MeLines[0]);
+		Uid = trim(MeLines[1]);
+		for(int i=2;i<MeLines.size();i++)
+		PrivKey = PrivKey+MeLines[i];
 	}
-	if (Name.length() < 1 || Uid.length() != 16 || PrivKey.length() != 16)//If faulty data return empty struct
+	if (Name.length() < 1 || Uid.length() != 32)//If faulty data return empty struct
 	{
 		PrivKey = "";
 		Uid = "";
@@ -86,6 +86,30 @@ MeInfo parseMeInfoFile(const std::string& filename) {
 	return meInfo;
 }
 
+KeyInfo parseKeyInfoFile(const std::string& filename) {
+	KeyInfo keyInfo;
+
+	std::ifstream file(filename);
+	if (!file.is_open()) {
+		std::cerr << "Error opening file: " << filename << std::endl;
+		return keyInfo;
+	}
+
+	size_t BuffSize;
+	auto data = GetFileData(filename, &BuffSize);
+	// Parse the first line with string splitting
+	std::string PrivKey = readStringFromFile(filename);
+	if (PrivKey.size() < 1)
+	{
+		PrivKey = "";
+	}
+	keyInfo.PrivKey = PrivKey;
+	return keyInfo;
+}
+
+std::ofstream* CreateFile(const std::string& path, bool returnOpenFile);
+
+bool writeToFile(std::ofstream* fileStream, const std::string& content, bool shouldCloseFile);
 
 std::vector<std::string> split(const std::string& s, char delimiter) {
 	std::vector<std::string> tokens;
@@ -96,6 +120,36 @@ std::vector<std::string> split(const std::string& s, char delimiter) {
 	}
 	return tokens;
 }
+
+std::vector<std::string> splitFirstTokens(const std::string& s, char delimiter, int amount) {
+	std::vector<std::string> tokens;
+	std::string token;
+	int i = 0;
+
+	// Use getline for the first part
+	std::istringstream tokenStream(s);
+	while (std::getline(tokenStream, token, delimiter) && i < amount ) {
+		tokens.push_back(token);
+		i++;
+	}
+
+	// Use getc for the remaining part
+	int c;
+	int len = 0;
+	while ((c = tokenStream.get()) != EOF) {
+		if (c == delimiter) {
+			break; // Stop at the first delimiter after reaching the specified amount
+		}
+		token += static_cast<char>(c);
+		len++;
+	}
+
+	// Add the last token
+	tokens.push_back(token);
+
+	return tokens;
+}
+
 
 bool IfFileExists(const std::string& name) {
 	struct stat buffer;
@@ -113,11 +167,12 @@ std::string GetFileData(std::string fname, size_t* buffer_size) {
 		char* FileData = new char[Size];
 		f1.seekg(0, std::ios::beg);
 		f1.read(FileData, Size);
+		ReturnedBuffer = std::string(FileData);
+		delete FileData;
 	}
 	else {
 		std::cerr << "GetFileData: Cannot open input file " << fname << std::endl;
 	}
-
 	*buffer_size = Size;
 	return ReturnedBuffer;
 }
@@ -177,7 +232,7 @@ bool writeToFile(std::ofstream* fileStream, const std::string& content, bool sho
 
 
 std::string MeInfo::AsciiIdentifier() {
-	auto str= hexStringToAscii(HexStrIdentifier.c_str());
+	auto str = hexStringToAscii(HexStrIdentifier.c_str());
 	return str;
 }
 
@@ -187,7 +242,7 @@ bool MeInfo::SaveFile()
 	bool write_success = false;
 	std::ofstream file(ME_FILE_PATH);
 	if (file.is_open()) { // Checking if the file is open
-		file << Name<<std::endl<<HexStrIdentifier<<std::endl<<Privkey; // Writing content to the file
+		file << Name << std::endl << HexStrIdentifier << std::endl << Privkey; // Writing content to the file
 		file.close(); // Closing the file stream
 		std::cerr << "Content written to " << ME_FILE_PATH << " successfully." << std::endl;
 		write_success = true;
@@ -201,16 +256,64 @@ bool MeInfo::SaveFile()
 //writes key info struct to file
 bool KeyInfo::SaveFile()
 {
-	bool write_success = false;
-	std::ofstream file(PRIV_KEY_PATH);
-	if (file.is_open()) { // Checking if the file is open
-		file << PrivKey; // Writing content to the file
-		file.close(); // Closing the file stream
-		std::cerr << "Content written to " << ME_FILE_PATH << " successfully." << std::endl;
-		write_success = true;
-	}
-	else {
-		std::cerr << "Unable to create or open the file." << std::endl;
-	}
-	return write_success;
+	writeStringToFile(this->PrivKey,PRIV_KEY_PATH);
+	return true;
 }
+
+
+
+std::string readEntireFile(const std::string& filename) {
+	std::ifstream file(filename, std::ios::binary);
+
+	if (!file.is_open()) {
+		std::cerr << "Error opening file: " << filename << std::endl;
+		return "";
+	}
+
+	// Read the entire content into a string
+	std::ostringstream contentStream;
+	contentStream << file.rdbuf();
+	return contentStream.str();
+}
+
+
+std::string readStringFromFile(const std::string& filename) {
+	// Open the file in binary mode
+	std::ifstream inputFile(filename, std::ios::binary);
+
+	if (!inputFile.is_open()) {
+		std::cerr << "Error opening file: " << filename << std::endl;
+		return "";
+	}
+
+	// Determine the size of the file
+	inputFile.seekg(0, std::ios::end);
+	size_t fileSize = static_cast<size_t>(inputFile.tellg());
+	inputFile.seekg(0, std::ios::beg);
+
+	// Read the contents of the file into a string
+	std::string fileContents(fileSize, '\0');
+	inputFile.read(&fileContents[0], fileSize);
+
+	// Close the file
+	inputFile.close();
+
+	return fileContents;
+}
+
+void writeStringToFile(const std::string& myString, const std::string& filename) {
+	// Open the file in binary mode
+	std::ofstream outputFile(filename, std::ios::binary);
+
+	if (!outputFile.is_open()) {
+		std::cerr << "Error opening file: " << filename << std::endl;
+		return;
+	}
+
+	// Write the string to the file
+	outputFile.write(myString.c_str(), myString.size());
+
+	// Close the file
+	outputFile.close();
+}
+

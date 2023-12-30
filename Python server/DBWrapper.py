@@ -136,9 +136,15 @@ class ThreadSafeSQLite:
         with self._lock:
             self._connect()
             try:
-                self._cursor.execute("SELECT COUNT(*) FROM clients WHERE Name=? AND ID IS NOT NULL AND ID=? '' AND publickey IS NOT NULL AND PublicKey <> ''", (name,cid.bytes))
+                string_data = name.decode('ascii', errors='ignore')
+
+                # Cut the string at the position of the null byte
+                string_cut_at_null = string_data.split('\x00')[0]
+                self._cursor.execute("SELECT COUNT(*) FROM clients WHERE Name=? AND ID IS NOT NULL AND ID=? AND publickey IS NOT NULL AND PublicKey <> ''", (string_cut_at_null,cid.bytes))
                 count = self._cursor.fetchone()[0]
                 return count > 0
+            except Exception as e:
+                pass
             finally:
                 self._disconnect()
     def update_user_last_seen(self, name):
@@ -166,7 +172,22 @@ class ThreadSafeSQLite:
                 self._disconnect()                
         return success
     
-    
+    def get_user_pub_key(self, context):
+        with self._lock:
+            self._connect()
+            try:
+                # Assuming PublicKey is the column name in your table
+                self._cursor.execute("SELECT PublicKey FROM clients WHERE ID=?", (context.ID.bytes,))
+                result = self._cursor.fetchone()
+                if result:
+                    pub_key = result[0]
+                    return pub_key
+                else:
+                    # Return some default value or raise an exception
+                    return None
+            finally:
+                self._disconnect()
+        
     def set_user_aes_key(self, ID:uuid, AESKey):
         success:bool =True
         with self._lock:

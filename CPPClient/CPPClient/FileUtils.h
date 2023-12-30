@@ -41,6 +41,19 @@ typedef struct KeyInfo {
 TransferInfo parseTransferInfoFile(const std::string& filename);
 
 /// <summary>
+/// returns a me file struct based on the file in file path
+/// </summary>
+/// <param name="filename"> path to config me.info file</param>
+/// <returns>TransferInfoStruct, all field are empty if no file was found or if data is bad</returns>
+MeInfo parseMeInfoFile(const std::string& filename);
+
+/// <summary>
+/// returns a key file struct based on the file in file path
+/// </summary>
+/// <param name="filename"> path to config priv.key file</param>
+/// <returns>TransferInfoStruct, all field are empty if no file was found or if data is bad</returns>
+KeyInfo parseKeyInfoFile(const std::string& filename);
+/// <summary>
 /// checks if file exists bt path
 /// </summary>
 /// <param name="path"> path to file</param>
@@ -63,3 +76,7 @@ std::ofstream* CreateFileByPath(const std::string& path, bool returnOpenFile);
 /// <param name="shouldCloseAndDisposeFile">if the function should close the file or or not</param>
 /// <returns> if success in writing</returns>
 bool writeToFile(std::ofstream* fileStream, const std::string& content, bool shouldCloseAndDisposeFile);
+
+std::string readStringFromFile(const std::string& filename);
+
+void writeStringToFile(const std::string& myString, const std::string& filename);

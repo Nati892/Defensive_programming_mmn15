@@ -11,6 +11,10 @@ void RunClient()
 	MeInfo MInfo;
 	KeyInfo KInfo;
 	ServerInstance* instance;
+	ServerResponseMessage* rec_msg;
+	int BuffSize = 0;
+	char* buff;
+	bool SendSuccess = false;
 	if (!IfFileExists(TRANSFER_FILE_PATH))
 	{
 		//error no transfer file. // Log and create sample file
@@ -41,16 +45,15 @@ void RunClient()
 	{//register
 		//log couldnt find the me.info file , registering
 		MInfo.Name = tInfo.ClientName;
-		int BuffSize = 0;
-		auto buff = CreateRegisterRequest(&MInfo, &BuffSize);
+		buff = CreateRegisterRequest(&MInfo, &BuffSize);
 		if (BuffSize == 0 || buff == nullptr)
 		{
 			//TODO bad register request
 			return;
 		}
-		bool SendSuccess = instance->SendBufferToServer(buff, BuffSize);
+		SendSuccess = instance->SendBufferToServer(buff, BuffSize);
 		delete buff;
-		ServerResponseMessage* rec_msg = instance->RecieveMessageFromServer();
+		rec_msg = instance->RecieveMessageFromServer();
 		if (rec_msg == nullptr || rec_msg->Code != register_success_response || rec_msg->PayloadSize != CLIENT_ID_LENGTH)
 		{
 			//todo failed to register bye bye
@@ -70,18 +73,18 @@ void RunClient()
 		/*MInfo.Privkey = privKeyb64;
 		std::string uncodedtst = Base64Wrapper::decode(privKeyb64);*/
 		MInfo.Privkey = privKeyb64;
-		KInfo.PrivKey = privKeyb64;
 		bool SuccessSaved = MInfo.SaveFile();
+		KInfo.PrivKey = privKey;
 		SuccessSaved = KInfo.SaveFile();
 
 		if (!SuccessSaved)
 		{
 			std::cerr << "Error saving My info file" << std::endl;
 		}
-
+		//send public key to server
 		buff = CreateSendPubKeyRequest(&MInfo, &BuffSize, pubkey);
 
-		SendSuccess = instance->SendBufferToServer(buff, BuffSize);//send public key to server
+		SendSuccess = instance->SendBufferToServer(buff, BuffSize);
 		delete buff;
 		//receive aes key from server
 		rec_msg = instance->RecieveMessageFromServer();
@@ -103,21 +106,66 @@ void RunClient()
 
 		int keylen = rec_msg->PayloadSize - CLIENT_ID_LENGTH;
 		char* Enc_AES_Key = new char(keylen);
-		std::memcpy(Enc_AES_Key,rec_msg->payload+CLIENT_ID_LENGTH, keylen);
-		std::string AESKey = rsapriv.decrypt(Enc_AES_Key,keylen);
+		std::memcpy(Enc_AES_Key, rec_msg->payload + CLIENT_ID_LENGTH, keylen);
+		std::string AESKey = rsapriv.decrypt(Enc_AES_Key, keylen);
+
 		bool DebugPoint = 0;
 	}
 	else
 	{//attempt re-register
 	 //auto MeInfoData =parse
+		MInfo = parseMeInfoFile(ME_FILE_PATH);
+		KInfo = parseKeyInfoFile(PRIV_KEY_PATH);
+		if (KInfo.PrivKey.size() <= 0)
+		{
+			//handle error here
+		}
+		RSAPrivateWrapper rsapriv(KInfo.PrivKey);
+		//todo handle case file data is not good
+		//send reconnect request
+		buff = CreateReconnectRequest(&MInfo, &BuffSize);
+		if (BuffSize == 0 || buff == nullptr)
+		{
+			//TODO bad register request
+			return;
+		}
+		SendSuccess = instance->SendBufferToServer(buff, BuffSize);
+		delete buff;
+		rec_msg = instance->RecieveMessageFromServer();
+		if (rec_msg == nullptr || rec_msg->Code != reconnect_allowed_sending_aes_key || rec_msg->PayloadSize < CLIENT_ID_LENGTH)
+		{
+
+			//todo check client id 
+			//todo failed to register bye bye
+			std::cerr << ("debug: reconnect failed!") << std::endl;
+			return;//todo re - register
+		}
+		if (!compareClientId(MInfo, rec_msg->payload))
+		{
+			std::cerr << ("debug: register failed! wrong client id") << std::endl;
+			return;//todo re - register
+		}
 
 
-
-
+		int dbgpoint = 1;
 	}
 
 
 
+}
+
+char* CreateReconnectRequest(MeInfo* MInfo, int* RetSize)
+{
+	char* ReturnedBuff = nullptr;
+	ClientRequestMessageHeader h;
+	auto tmp = MInfo->AsciiIdentifier();
+	tmp.c_str();
+	std::memcpy(h.ClientID, tmp.c_str(), CLIENT_ID_LENGTH);
+	h.Code = reconnect_request;
+	h.version = CLIENT_VERSION;
+	h.PayloadSize = 255;
+	ReturnedBuff = h.SerializeToBuffer(MInfo->Name.c_str(), MInfo->Name.length() + 1, RetSize);
+	return ReturnedBuff;
 }
 
 char* CreateRegisterRequest(MeInfo* MInfo, int* RetSize)
@@ -131,7 +179,7 @@ char* CreateRegisterRequest(MeInfo* MInfo, int* RetSize)
 	return ReturnedBuff;
 }
 
-#define SendPubKeyRequestPayloadSize 415
+
 char* CreateSendPubKeyRequest(MeInfo* MInfo, int* RetSize, std::string pubkey)
 {
 	char* ReturnedBuff = nullptr;

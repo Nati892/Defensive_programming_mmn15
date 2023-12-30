@@ -5,6 +5,7 @@
 #define CLIENT_ID_LENGTH 16
 #define BUFFER_SIZE 1024
 #define MIN_2102_PAYLOAD_SIZE 32
+#define SendPubKeyRequestPayloadSize 415
 enum ServerMessageType :__int16
 {
 	register_success_response = 2100,

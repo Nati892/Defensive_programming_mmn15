@@ -6,3 +6,4 @@
 void RunClient();
 char* CreateRegisterRequest(MeInfo* MInfo, int* RetSize);
 char* CreateSendPubKeyRequest(MeInfo* Meinfo, int* RetSize, std::string pubkey);
+char* CreateReconnectRequest(MeInfo* MInfo, int* RetSize);
