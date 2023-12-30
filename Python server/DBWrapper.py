@@ -132,6 +132,15 @@ class ThreadSafeSQLite:
             finally:
                 self._disconnect()
 
+    def rsa_for_user_exists(self, name:bytes,cid:uuid):
+        with self._lock:
+            self._connect()
+            try:
+                self._cursor.execute("SELECT COUNT(*) FROM clients WHERE Name=? AND ID IS NOT NULL AND ID=? '' AND publickey IS NOT NULL AND PublicKey <> ''", (name,cid.bytes))
+                count = self._cursor.fetchone()[0]
+                return count > 0
+            finally:
+                self._disconnect()
     def update_user_last_seen(self, name):
         with self._lock:
             self._connect()

@@ -66,10 +66,14 @@ void RunClient()
 
 		std::string pubkey = rsapriv.getPublicKey();
 		std::string privKey = rsapriv.getPrivateKey();
-		std::string privKeyb64 =Base64Wrapper::encode(privKey);
+		std::string privKeyb64 = Base64Wrapper::encode(privKey);
+		/*MInfo.Privkey = privKeyb64;
+		std::string uncodedtst = Base64Wrapper::decode(privKeyb64);*/
 		MInfo.Privkey = privKeyb64;
-		std::string uncodedtst = Base64Wrapper::decode(privKeyb64);
+		KInfo.PrivKey = privKeyb64;
 		bool SuccessSaved = MInfo.SaveFile();
+		SuccessSaved = KInfo.SaveFile();
+
 		if (!SuccessSaved)
 		{
 			std::cerr << "Error saving My info file" << std::endl;
@@ -77,8 +81,9 @@ void RunClient()
 
 		buff = CreateSendPubKeyRequest(&MInfo, &BuffSize, pubkey);
 
-		SendSuccess = instance->SendBufferToServer(buff, BuffSize);
+		SendSuccess = instance->SendBufferToServer(buff, BuffSize);//send public key to server
 		delete buff;
+		//receive aes key from server
 		rec_msg = instance->RecieveMessageFromServer();
 
 		if (rec_msg == nullptr || rec_msg->Code != pub_rsa_received_sending_encrypted_aes || rec_msg->PayloadSize < MIN_2102_PAYLOAD_SIZE)
@@ -89,15 +94,17 @@ void RunClient()
 			std::cerr << ("debug: register failed!") << std::endl;
 			return;
 		}
-		if (!compareClientId(MInfo,rec_msg->payload))
+		if (!compareClientId(MInfo, rec_msg->payload))
 		{
 			std::cerr << ("debug: register failed! wrong client id") << std::endl;
 			return;
 		}
 		//check client id to be good
 
-		//KInfo.AESKey=
-
+		int keylen = rec_msg->PayloadSize - CLIENT_ID_LENGTH;
+		char* Enc_AES_Key = new char(keylen);
+		std::memcpy(Enc_AES_Key,rec_msg->payload+CLIENT_ID_LENGTH, keylen);
+		std::string AESKey = rsapriv.decrypt(Enc_AES_Key,keylen);
 		bool DebugPoint = 0;
 	}
 	else

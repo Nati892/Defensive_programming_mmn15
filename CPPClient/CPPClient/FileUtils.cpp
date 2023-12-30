@@ -204,7 +204,7 @@ bool KeyInfo::SaveFile()
 	bool write_success = false;
 	std::ofstream file(PRIV_KEY_PATH);
 	if (file.is_open()) { // Checking if the file is open
-		file << AESKey; // Writing content to the file
+		file << PrivKey; // Writing content to the file
 		file.close(); // Closing the file stream
 		std::cerr << "Content written to " << ME_FILE_PATH << " successfully." << std::endl;
 		write_success = true;

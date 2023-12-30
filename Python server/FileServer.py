@@ -91,28 +91,36 @@ def HandleClientRegistration(context:ClientContext):
                 payload:bytes= ClientId
                 SendMessage(context,ServerMessageType.register_success_response,len(payload),payload)
                 
-                msg =ReceiveMesssage(context)
-                if msg.code!=ClientMessageType.send_public_key_request:
+                Messsage =ReceiveMesssage(context)
+                if Messsage.code!=ClientMessageType.send_public_key_request:
                     SendMessage(context,ServerMessageType.general_error,0,None)
                     return
-                if HandlePubKey(context,msg)==False:# try to handle pub-key
+                if HandlePubKey(context,Messsage)==False:# try to handle pub-key
                     return False;
                 
                 AESKey = CryptoWrapper.random_aes_key()#create aes key 
                 db_instance =DBWrapper.ThreadSafeSQLite()
-                db_instance.set_user_aes_key(msg.ID, AESKey)
+                db_instance.set_user_aes_key(Messsage.ID, AESKey)
                 #save in db the aes key
-                
                 #encrypt key and send it
                 encryptedAESKey=CryptoWrapper.rsa_encryption( context.PubKey,AESKey)
                 payload=ClientId+encryptedAESKey
                 SendMessage(context,ServerMessageType.pub_rsa_received_sending_encrypted_aes,len(payload),payload)
-                
-                debugpoint=False;
+                return True
         else:
             SendMessage(context,ServerMessageType.register_failure_response,0,None) 
-        pass
     elif Messsage.code == ClientMessageType.reconnect_request:#if client wants to reconnect
+        if CanReconnectClient(Messsage.Payload,Messsage.ID):
+            AESKey = CryptoWrapper.random_aes_key()#create aes key 
+            #save in db the aes key
+            db_instance =DBWrapper.ThreadSafeSQLite()
+            db_instance.set_user_aes_key(Messsage.ID, AESKey)
+            #encrypt key and send it
+            encryptedAESKey=CryptoWrapper.rsa_encryption( context.PubKey,AESKey)
+            payload=ClientId+encryptedAESKey
+            SendMessage(context,ServerMessageType.reconnect_allowed_sending_aes_key,len(payload),payload)
+        else:
+            SendMessage(context,ServerMessageType.reconnect_denied,0,None)
         pass
     else:
         SendMessage(context,ServerMessageType.general_error,0,None)
@@ -120,13 +128,19 @@ def HandleClientRegistration(context:ClientContext):
     return registered
 
 #registraition
-def CanRegisterClient(ClientNameString):
+def CanRegisterClient(ClientNameString:bytes):
     CanConnect:bool = False
     db_instance =DBWrapper.ThreadSafeSQLite()
     CanConnect=not db_instance.user_name_exists(ClientNameString)
     return CanConnect
 
-def RegisterClient(ClientNameString):
+def CanReconnectClient(ClientNameString:bytes,cid:uuid):
+    CanConnect:bool = False
+    db_instance =DBWrapper.ThreadSafeSQLite()
+    CanConnect=not db_instance.rsa_for_user_exists(ClientNameString,cid)
+    return CanConnect
+
+def RegisterClient(ClientNameString:bytes):
     db_instance =DBWrapper.ThreadSafeSQLite()
     c_uuid=db_instance.create_user(ClientNameString)
     
@@ -184,7 +198,7 @@ def SendMessage(context:ClientContext,MessageCode,bufferSize,buffer):
     pass
     
 # data receive
-def ReceiveData(soc):
+def ReceiveData(soc:socket):
     try:
         data = soc.recv(1024)
         if not data:
@@ -200,7 +214,7 @@ def ReceiveData(soc):
         return b"", 0
     
 # data send
-def SendData(soc, data):
+def SendData(soc:socket, data:bytes):
     try:
         if not data or len(data) == 0:
             return False

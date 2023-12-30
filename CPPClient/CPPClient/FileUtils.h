@@ -27,7 +27,7 @@ typedef struct MeInfo {
 	bool SaveFile();
 };
 typedef struct KeyInfo {
-	std::string AESKey;
+	std::string PrivKey;
 	bool SaveFile();
 };
 

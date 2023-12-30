@@ -52,6 +52,7 @@ private:
 	SOCKET* clientSocket = nullptr;
 	char SavedDataBuffer[BUFFER_SIZE];
 	int SavedDataBufferSize = 0;
+	char* AESKey = nullptr;
 public:
 
 	ServerInstance(TransferInfo TInfo)
@@ -64,6 +65,8 @@ public:
 		closesocket(*clientSocket);
 		WSACleanup();
 		delete clientSocket;
+		if (AESKey != nullptr)
+			delete AESKey;
 	}
 	bool StartConnection();
 	void CloseConnection();
