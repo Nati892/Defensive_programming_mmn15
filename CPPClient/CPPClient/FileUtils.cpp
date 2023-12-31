@@ -1,9 +1,7 @@
 #include "FileUtils.h"
 #include "CryptoWrapper/Base64Wrapper.h"
 
-std::vector<std::string> split(const std::string& s, char delimiter);
-std::vector<std::string> splitFirstTokens(const std::string& s, char delimiter, int amount);
-std::string GetFileData(std::string fname, size_t* buffer_size);
+
 
 TransferInfo parseTransferInfoFile(const std::string& filename) {
 	TransferInfo transferInfo;
@@ -71,8 +69,8 @@ MeInfo parseMeInfoFile(const std::string& filename) {
 	{
 		Name = trim(MeLines[0]);
 		Uid = trim(MeLines[1]);
-		for(int i=2;i<MeLines.size();i++)
-		PrivKey = PrivKey+MeLines[i];
+		for (int i = 2; i < MeLines.size(); i++)
+			PrivKey = PrivKey + MeLines[i];
 	}
 	if (Name.length() < 1 || Uid.length() != 32)//If faulty data return empty struct
 	{
@@ -107,7 +105,7 @@ KeyInfo parseKeyInfoFile(const std::string& filename) {
 	return keyInfo;
 }
 
-std::ofstream* CreateFile(const std::string& path, bool returnOpenFile);
+
 
 bool writeToFile(std::ofstream* fileStream, const std::string& content, bool shouldCloseFile);
 
@@ -128,7 +126,7 @@ std::vector<std::string> splitFirstTokens(const std::string& s, char delimiter, 
 
 	// Use getline for the first part
 	std::istringstream tokenStream(s);
-	while (std::getline(tokenStream, token, delimiter) && i < amount ) {
+	while (std::getline(tokenStream, token, delimiter) && i < amount) {
 		tokens.push_back(token);
 		i++;
 	}
@@ -256,7 +254,7 @@ bool MeInfo::SaveFile()
 //writes key info struct to file
 bool KeyInfo::SaveFile()
 {
-	writeStringToFile(this->PrivKey,PRIV_KEY_PATH);
+	writeStringToFile(this->PrivKey, PRIV_KEY_PATH);
 	return true;
 }
 
@@ -274,6 +272,26 @@ std::string readEntireFile(const std::string& filename) {
 	std::ostringstream contentStream;
 	contentStream << file.rdbuf();
 	return contentStream.str();
+}
+
+
+bool readfile(std::string fname, char** buffer_out, int* buff_size_out) {
+	if (std::filesystem::exists(fname)) {
+		std::filesystem::path fpath = fname;
+		std::ifstream f1(fname.c_str(), std::ios::binary);
+
+		size_t size = std::filesystem::file_size(fpath);
+		char* b = new char[size];
+		f1.seekg(0, std::ios::beg);
+		f1.read(b, size);
+		*buffer_out = b;
+		*buff_size_out = size;
+		return true;
+	}
+	else {
+		std::cerr << "Cannot open input file " << fname << std::endl;
+		return false;
+	}
 }
 
 
@@ -317,3 +335,12 @@ void writeStringToFile(const std::string& myString, const std::string& filename)
 	outputFile.close();
 }
 
+bool deleteFile(const char* filename) {
+	if (std::remove(filename) == 0) {
+		return true;
+	}
+	else {
+		std::cerr << "Error deleting file" << std::endl;
+		return false;
+	}
+}

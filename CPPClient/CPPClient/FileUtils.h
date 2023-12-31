@@ -80,3 +80,8 @@ bool writeToFile(std::ofstream* fileStream, const std::string& content, bool sho
 std::string readStringFromFile(const std::string& filename);
 
 void writeStringToFile(const std::string& myString, const std::string& filename);
+std::ofstream* CreateFile(const std::string& path, bool returnOpenFile);
+std::vector<std::string> split(const std::string& s, char delimiter);
+std::vector<std::string> splitFirstTokens(const std::string& s, char delimiter, int amount);
+std::string GetFileData(std::string fname, size_t* buffer_size);
+bool deleteFile(const char* filename);

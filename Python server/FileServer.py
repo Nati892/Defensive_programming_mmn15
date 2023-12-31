@@ -73,8 +73,10 @@ class Server:
         print("handler started")
         Context = ClientContext(client_socket)
         Context.soc=client_socket
-        IsClientRegistered=HandleClientRegistration(Context)
-        pass
+        with Context.soc:
+            IsClientRegistered=HandleClientRegistration(Context)
+            if IsClientRegistered:
+                GetClientFile(Context)
 
 #this func makes sure the client is registered either first time registration or reconnection
 def HandleClientRegistration(context:ClientContext):
@@ -121,9 +123,10 @@ def HandleClientRegistration(context:ClientContext):
             encryptedAESKey=CryptoWrapper.rsa_encryption( context.PubKey,AESKey)
             payload=context.ID.bytes+encryptedAESKey
             SendMessage(context,ServerMessageType.reconnect_allowed_sending_aes_key,len(payload),payload)
+            registered= True
         else:
-            SendMessage(context,ServerMessageType.reconnect_denied,0,None)
-        pass
+            SendMessage(context,ServerMessageType.reconnect_denied,context.ID,len(context.ID))
+            registered= False
     else:
         SendMessage(context,ServerMessageType.general_error,0,None)
     
@@ -195,6 +198,12 @@ def ReceiveMesssage(context:ClientContext):
     # Remove the extracted bytes from the buffer
     context.BufferedData = context.BufferedData[Request.PayloadSize:]
     return Request
+
+
+def GetClientFile(Context:ClientContext):
+    #get client message file, and check crc stuff loop 
+    pass
+
 
 #send message to client via context
 def SendMessage(context:ClientContext,MessageCode,bufferSize,buffer):
