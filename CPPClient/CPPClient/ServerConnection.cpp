@@ -35,7 +35,7 @@ bool ServerInstance::StartConnection()
 	serverAddr.sin_port = htons(this->TInfo.port);  // Change this to the port your server is listening on
 
 	// Convert IPv4 address from string to binary form
-	if (inet_pton(AF_INET, this->TInfo.ipAddress.c_str(), &(serverAddr.sin_addr)) <= 0) {
+	if (inet_pton(AF_INET, this->TInfo.ipAddress.data(), &(serverAddr.sin_addr)) <= 0) {
 		std::cerr << "Invalid address. Failed to convert the IP address." << std::endl;
 		closesocket(*clientSocket);
 		WSACleanup();
@@ -206,7 +206,7 @@ bool IsSocketOpen(SOCKET socket) {
 	return error == 0;
 }
 
-char* ClientRequestMessageHeader::SerializeToBuffer(const char* Payload, int buffsize, int* RetSize)
+char* ClientRequestMessageHeader::SerializeToBuffer(char* Payload, int buffsize, int* RetSize)
 {
 	int NewBuffSize = sizeof(this->ClientID) + sizeof(this->Code) + sizeof(this->version) + sizeof(this->PayloadSize) + PayloadSize;
 	char* buffer = new char[NewBuffSize];

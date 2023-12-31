@@ -6,6 +6,7 @@ from Messages import *
 import Utils
 import DBWrapper
 import CryptoWrapper
+import cksum
 #Global constants
 LOCAL_CONFIG_PATH = "port.info"
 DEFAULT_PORT = "1357"
@@ -101,6 +102,7 @@ def HandleClientRegistration(context:ClientContext):
                     return False;
                 
                 AESKey = CryptoWrapper.random_aes_key()#create aes key 
+                context.AESKey=AESKey#save in context
                 db_instance =DBWrapper.ThreadSafeSQLite()
                 db_instance.set_user_aes_key(Messsage.ID, AESKey)
                 #save in db the aes key
@@ -116,6 +118,7 @@ def HandleClientRegistration(context:ClientContext):
             context.ID=Messsage.ID
             context.PubKey= GetPubKey(context)
             AESKey = CryptoWrapper.random_aes_key()#create aes key 
+            context.AESKey=AESKey#save in context
             #save in db the aes key
             db_instance =DBWrapper.ThreadSafeSQLite()
             db_instance.set_user_aes_key(Messsage.ID, AESKey)
@@ -202,6 +205,23 @@ def ReceiveMesssage(context:ClientContext):
 
 def GetClientFile(Context:ClientContext):
     #get client message file, and check crc stuff loop 
+    msg =ReceiveMesssage(Context)# get the file msg
+    if not msg.code==ClientMessageType.send_file_request:
+        SendGeneralError(Context);
+    
+    byte_array = msg.Payload[:4]
+    msg.Payload=msg.Payload[4:]
+    integer_value = int.from_bytes(byte_array, byteorder='little')
+    
+    FileNameArr=msg.Payload[:255]
+    msg.Payload=msg.Payload[255:]
+    
+    string_data = FileNameArr.decode('ascii', errors='ignore')
+
+                # Cut the string at the position of the null byte
+    FileName = string_data.split('\x00')[0]
+    filedata =  CryptoWrapper.aes_decryption(Context.AESKey,msg.Payload)
+    FileCRC =cksum.memcrc(filedata)
     pass
 
 
@@ -244,10 +264,13 @@ def SendData(soc:socket, data:bytes):
             print ( len(encoded_data))
             soc.send(encoded_data)
         except:
-            print("failed to send message to scket, socket closed")
+            print("failed to send message to socket, socket closed")
             return False
         return True
 
     except Exception as e:
         print(f"Error occurred while handling client: {e}")
         return False
+
+def SendGeneralError(context:ClientContext):
+    SendMessage(context,ServerMessageType.general_error,0,None)

@@ -1,7 +1,8 @@
 #include "Client.h"
 #include "stdio.h"
 #include "FileUtils.h"
-
+#include "CRCChecksum.h"
+#include "CryptoWrapper/AESWrapper.h"
 
 
 void RunClient()
@@ -13,7 +14,7 @@ void RunClient()
 	std::string* AESKey;
 	RSAPrivateWrapper* rsapriv;
 	int BuffSize = 0;
-	char* buff;
+	char* buff=nullptr;
 	bool SendSuccess = false;
 	bool success_reg;
 	if (!IfFileExists(TRANSFER_FILE_PATH))
@@ -50,14 +51,35 @@ void RunClient()
 	else
 	{//attempt re-register
 	 //auto MeInfoData =parse
-		success_reg=ReconnectClient(tInfo, instance, &MInfo, &AESKey, &rsapriv);
+		success_reg = ReconnectClient(tInfo, instance, &MInfo, &AESKey, &rsapriv);
 	}
-	
+
 	if (!success_reg)
 	{
 		std::cout << "failed to register or connect to server" << std::endl;
 		return;
 	}
+	std::string tmp(*AESKey);
+
+	if (!IfFileExists(tInfo.filePath))
+	{
+		std::cerr << "bad file path" << std::endl;
+		return;
+	}
+
+	int FileSize = 0;
+	char* FileBuff;
+	bool ReadSuccess = readfile(tInfo.filePath, &FileBuff, &FileSize);
+	if (!ReadSuccess)
+	{
+		std::cerr << "error reading file data" << std::endl;
+		return;
+	}
+	unsigned long CRCCode = memcrc(FileBuff, FileSize);
+	buff = CreateSendFileRequest(MInfo, tInfo, tmp, FileBuff, FileSize, &BuffSize);
+	if (buff != nullptr && BuffSize > 0)
+		instance->SendBufferToServer(buff, BuffSize);
+	int dbgpoint = 0;
 
 	//add file send, crc and loop for crc. and go through todos
 
@@ -138,7 +160,7 @@ bool RegisterClient(TransferInfo TInfo, ServerInstance* server, MeInfo* MInfo_ou
 	//check client id to be good
 
 	int keylen = rec_msg->PayloadSize - CLIENT_ID_LENGTH;
-	char* Enc_AES_Key = new char(keylen);
+	char* Enc_AES_Key = new char[keylen];
 	std::memcpy(Enc_AES_Key, rec_msg->payload + CLIENT_ID_LENGTH, keylen);
 	std::string AESKey = rsapriv->decrypt(Enc_AES_Key, keylen);
 
@@ -192,7 +214,7 @@ bool ReconnectClient(TransferInfo TInfo, ServerInstance* server, MeInfo* MInfo_o
 	}
 
 	int keylen = rec_msg->PayloadSize - CLIENT_ID_LENGTH;
-	char* Enc_AES_Key = new char(keylen);
+	char* Enc_AES_Key = new char[keylen];
 	std::memcpy(Enc_AES_Key, rec_msg->payload + CLIENT_ID_LENGTH, keylen);
 	std::string AESKey = rsapriv->decrypt(Enc_AES_Key, keylen);
 	//delete Enc_AES_Key; //todo check why crash
@@ -209,13 +231,12 @@ char* CreateReconnectRequest(MeInfo* MInfo, int* RetSize)
 {
 	char* ReturnedBuff = nullptr;
 	ClientRequestMessageHeader h;
-	auto tmp = MInfo->AsciiIdentifier();
-	tmp.c_str();
-	std::memcpy(h.ClientID, tmp.c_str(), CLIENT_ID_LENGTH);
+	auto tmp = AsciiIdentifier(*MInfo);
+	std::memcpy(h.ClientID, tmp.data(), CLIENT_ID_LENGTH);
 	h.Code = reconnect_request;
 	h.version = CLIENT_VERSION;
 	h.PayloadSize = 255;
-	ReturnedBuff = h.SerializeToBuffer(MInfo->Name.c_str(), MInfo->Name.length() + 1, RetSize);
+	ReturnedBuff = h.SerializeToBuffer(MInfo->Name.data(), MInfo->Name.length() + 1, RetSize);
 	return ReturnedBuff;
 }
 
@@ -226,7 +247,7 @@ char* CreateRegisterRequest(MeInfo* MInfo, int* RetSize)
 	h.Code = register_request;
 	h.version = CLIENT_VERSION;
 	h.PayloadSize = 255;
-	ReturnedBuff = h.SerializeToBuffer(MInfo->Name.c_str(), MInfo->Name.length() + 1, RetSize);
+	ReturnedBuff = h.SerializeToBuffer(MInfo->Name.data(), MInfo->Name.length() + 1, RetSize);
 	return ReturnedBuff;
 }
 
@@ -235,23 +256,61 @@ char* CreateSendPubKeyRequest(MeInfo* MInfo, int* RetSize, std::string pubkey)
 {
 	char* ReturnedBuff = nullptr;
 	ClientRequestMessageHeader h;
-	auto tmp = MInfo->AsciiIdentifier();
-	std::memcpy(h.ClientID, tmp.c_str(), CLIENT_ID_LENGTH);
+	auto tmp = AsciiIdentifier(*MInfo);
+	std::memcpy(h.ClientID, tmp.data(), CLIENT_ID_LENGTH);
 	h.Code = send_public_key_request;
 	h.version = CLIENT_VERSION;
 	h.PayloadSize = SendPubKeyRequestPayloadSize;
 	char payload[SendPubKeyRequestPayloadSize];//create payload buffer
-	std::memcpy(payload, MInfo->Name.c_str(), MInfo->Name.length() + 1);//copy name
-	std::memcpy(payload + 255, pubkey.c_str(), RSAPublicWrapper::KEYSIZE);//copy rsapubkey
+	std::memcpy(payload, MInfo->Name.data(), MInfo->Name.length() + 1);//copy name
+	std::memcpy(payload + 255, pubkey.data(), RSAPublicWrapper::KEYSIZE);//copy rsapubkey
 
 	ReturnedBuff = h.SerializeToBuffer(payload, SendPubKeyRequestPayloadSize, RetSize);
 	return ReturnedBuff;
 }
 
-bool compareClientId(MeInfo MInfo, char* buff)
+
+char* CreateSendFileRequest(MeInfo MInfo, TransferInfo TInfo, std::string AESKey, char* FileData, int FileSize, int* RetSize)
 {
-	bool ret = false;
-	auto toCmp = hexStringToAscii(MInfo.HexStrIdentifier.c_str());
-	ret = std::memcmp(toCmp.c_str(), buff, CLIENT_ID_LENGTH) == 0;
-	return ret;
+	char* ReturnedBuff;
+	char* buff = nullptr;
+	*RetSize = 0;
+
+	//encrypt file
+	unsigned char aeskey[AESWrapper::DEFAULT_KEYLENGTH];
+	std::memcpy(aeskey, AESKey.data(), AESWrapper::DEFAULT_KEYLENGTH);
+	AESWrapper aesEncryptor(aeskey, AESWrapper::DEFAULT_KEYLENGTH);
+	std::string EncryptedFile = aesEncryptor.encrypt(FileData, FileSize);
+
+	//calc payload size
+	auto PayloadSize = sizeof(int) + FILE_NAME_SIZE + EncryptedFile.size();
+	buff = new char[PayloadSize];
+
+	char* FileSizeLength = ConvertInt32ToEndian(PayloadSize);//4 bytes of file size length
+	char file_name[FILE_NAME_SIZE];//file size
+
+	//copy size
+	int msgBuffLocation = 0;
+	std::memcpy(buff, FileSizeLength, sizeof(int));
+	msgBuffLocation += sizeof(int);
+
+	//copy file name
+	std::memcpy(buff + msgBuffLocation, TInfo.filePath.data(), min(TInfo.filePath.size(), FILE_NAME_SIZE));
+	msgBuffLocation += FILE_NAME_SIZE;
+
+	//copy encrypted file
+	std::memcpy(buff + msgBuffLocation, EncryptedFile.data(), EncryptedFile.size());
+
+	//createMessage
+	ClientRequestMessageHeader h;
+	auto tmp = AsciiIdentifier(MInfo);
+	std::memcpy(h.ClientID, tmp.data(), CLIENT_ID_LENGTH);
+	h.Code = send_file_request;
+	h.version = CLIENT_VERSION;
+	h.PayloadSize = PayloadSize;
+	ReturnedBuff = h.SerializeToBuffer(buff, h.PayloadSize, RetSize);
+	//	delete FileSizeLength;//crashing for some reason
+
+	return ReturnedBuff;
 }
+

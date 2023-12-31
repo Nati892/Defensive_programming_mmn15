@@ -1,7 +1,9 @@
 #include "FileUtils.h"
-#include "CryptoWrapper/Base64Wrapper.h"
 
-
+std::string AsciiIdentifier(MeInfo MInfo) {
+	auto str = hexStringToAscii(MInfo.HexStrIdentifier.data(), MInfo.HexStrIdentifier.size());
+	return str;
+}
 
 TransferInfo parseTransferInfoFile(const std::string& filename) {
 	TransferInfo transferInfo;
@@ -107,7 +109,6 @@ KeyInfo parseKeyInfoFile(const std::string& filename) {
 
 
 
-bool writeToFile(std::ofstream* fileStream, const std::string& content, bool shouldCloseFile);
 
 std::vector<std::string> split(const std::string& s, char delimiter) {
 	std::vector<std::string> tokens;
@@ -229,10 +230,7 @@ bool writeToFile(std::ofstream* fileStream, const std::string& content, bool sho
 }
 
 
-std::string MeInfo::AsciiIdentifier() {
-	auto str = hexStringToAscii(HexStrIdentifier.c_str());
-	return str;
-}
+
 
 //writes me info struct to file
 bool MeInfo::SaveFile()
@@ -343,4 +341,12 @@ bool deleteFile(const char* filename) {
 		std::cerr << "Error deleting file" << std::endl;
 		return false;
 	}
+}
+
+bool compareClientId(MeInfo MInfo, char* buff)
+{
+	bool ret = false;
+	auto toCmp = hexStringToAscii(MInfo.HexStrIdentifier.data(), MInfo.HexStrIdentifier.size());
+	ret = std::memcmp(toCmp.c_str(), buff, CLIENT_ID_LENGTH) == 0;
+	return ret;
 }

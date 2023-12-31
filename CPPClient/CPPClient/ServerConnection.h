@@ -2,7 +2,6 @@
 #include "FileUtils.h"
 #include <WinSock2.h>   
 #define SERVER_MESSAGE_HEADER_SIZE 7
-#define CLIENT_ID_LENGTH 16
 #define BUFFER_SIZE 1024
 #define MIN_2102_PAYLOAD_SIZE 32
 #define SendPubKeyRequestPayloadSize 415
@@ -30,11 +29,11 @@ enum ClientMessageType :__int16
 };
 
 struct ClientRequestMessageHeader {
-	unsigned char ClientID[CLIENT_ID_LENGTH];
+	char ClientID[CLIENT_ID_LENGTH];
 	unsigned char version;
 	unsigned short Code;
 	unsigned int PayloadSize;
-	char* SerializeToBuffer(const char* Payload, int PayloadSize, int* RetSize);
+	char* SerializeToBuffer( char* Payload, int PayloadSize, int* RetSize);
 };
 
 struct ServerResponseMessage
@@ -78,5 +77,6 @@ public:
 };
 
 
+//utility functions
 bool IsSocketOpen(SOCKET socket);
 bool compareClientId(MeInfo MInfo, char* buff);

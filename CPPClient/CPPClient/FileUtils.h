@@ -6,11 +6,16 @@
 #include <vector>
 #include <sys/stat.h>
 #include <filesystem>
+#include "CryptoWrapper/Base64Wrapper.h"
 #include "Utils.h"
+
 #define ME_FILE_PATH "me.info"
 #define TRANSFER_FILE_PATH "transfer.info"
 #define PRIV_KEY_PATH "priv.key"
 #define DEFAULT_TRANSFER_INFO_DATA "127.0.0.1:1234\nMichael Jackson\nSomeFileToSend"
+#define FILE_NAME_SIZE 255
+#define CLIENT_ID_LENGTH 16
+
 
 typedef struct TransferInfo {
 	std::string ipAddress;
@@ -23,7 +28,6 @@ typedef struct MeInfo {
 	std::string Name;
 	std::string HexStrIdentifier;
 	std::string Privkey;
-	std::string AsciiIdentifier();
 	bool SaveFile();
 };
 typedef struct KeyInfo {
@@ -79,9 +83,11 @@ bool writeToFile(std::ofstream* fileStream, const std::string& content, bool sho
 
 std::string readStringFromFile(const std::string& filename);
 
+bool writeToFile(std::ofstream* fileStream, const std::string& content, bool shouldCloseFile);
 void writeStringToFile(const std::string& myString, const std::string& filename);
-std::ofstream* CreateFile(const std::string& path, bool returnOpenFile);
 std::vector<std::string> split(const std::string& s, char delimiter);
 std::vector<std::string> splitFirstTokens(const std::string& s, char delimiter, int amount);
 std::string GetFileData(std::string fname, size_t* buffer_size);
+bool readfile(std::string fname, char** buffer_out, int* buff_size_out);
 bool deleteFile(const char* filename);
+std::string AsciiIdentifier(MeInfo MInfo);

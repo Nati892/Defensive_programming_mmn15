@@ -1,6 +1,5 @@
 #include "Utils.h"
 
-std::string charToHex(char c);
 
 bool IsLittleEndian() {
 	// Use union to interpret the bytes of a short
@@ -99,23 +98,28 @@ char hexPairToChar(const std::string& hexPair) {
 		throw std::invalid_argument("Input must be a 2-character hex string.");
 	}
 
-	int charValue;
-	std::stringstream hexStream(hexPair);
-	hexStream >> std::hex >> charValue;
+	try {
+		size_t pos;
+		int charValue = std::stoi(hexPair, &pos, 16);
 
-	if (hexStream.fail()) {
+		if (pos != hexPair.size()) {
+			throw std::invalid_argument("Invalid hex string: " + hexPair);
+		}
+
+		return static_cast<char>(charValue);
+	}
+	catch (const std::invalid_argument& e) {
 		throw std::invalid_argument("Invalid hex string: " + hexPair);
 	}
-
-	return static_cast<char>(charValue);
 }
-
 /// <summary>
 ///  Converts a hex-encoded string to its corresponding ASCII representation.
 /// </summary>
 /// <param name="hexString">hexString Null-terminated hex-encoded string with even length.</param>
 /// <returns>ASCII representation of the hex string</returns>
-std::string hexStringToAscii(const char* hexString) {
+std::string hexStringToAscii( char* constHexString, int str_len) {
+	char* hexString = new char[str_len];
+	std::memcpy(hexString, constHexString, str_len);
 	if (hexString == nullptr) {
 		throw std::invalid_argument("Input hex string is null.");
 	}
@@ -124,13 +128,16 @@ std::string hexStringToAscii(const char* hexString) {
 		throw std::invalid_argument("Input hex string length must be even.");
 	}
 
-	std::string result;
-	for (size_t i = 0; i < std::strlen(hexString); i += 2) {
+	char ascii[16];
+	for (size_t i = 0; i < str_len; i += 2) {
 		std::string hexPair = { hexString[i], hexString[i + 1] };
-		result.push_back(hexPairToChar(hexPair));
+		try {
+			ascii[i/2] =hexPairToChar(hexPair);
+		}
+		catch (std::exception& e) {}
 	}
 
-	return result;
+	return std::string(ascii);
 }
 
 //custom trim func

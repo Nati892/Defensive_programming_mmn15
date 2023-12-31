@@ -7,6 +7,7 @@ class ClientContext:
         BufferedData = b""
         ID:bytes
         PubKey:bytes
+        AESKey:bytes
         def __init__(self,soc:socket):
             self.soc=soc
             
