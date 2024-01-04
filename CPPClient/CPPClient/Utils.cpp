@@ -117,14 +117,14 @@ char hexPairToChar(const std::string& hexPair) {
 /// </summary>
 /// <param name="hexString">hexString Null-terminated hex-encoded string with even length.</param>
 /// <returns>ASCII representation of the hex string</returns>
-std::string hexStringToAscii( char* constHexString, int str_len) {
+std::string hexStringToAscii(char* constHexString, int str_len) {
 	char* hexString = new char[str_len];
 	std::memcpy(hexString, constHexString, str_len);
 	if (hexString == nullptr) {
 		throw std::invalid_argument("Input hex string is null.");
 	}
 
-	if (std::strlen(hexString) % 2 != 0) {
+	if (str_len % 2 != 0) {
 		throw std::invalid_argument("Input hex string length must be even.");
 	}
 
@@ -132,7 +132,7 @@ std::string hexStringToAscii( char* constHexString, int str_len) {
 	for (size_t i = 0; i < str_len; i += 2) {
 		std::string hexPair = { hexString[i], hexString[i + 1] };
 		try {
-			ascii[i/2] =hexPairToChar(hexPair);
+			ascii[i / 2] = hexPairToChar(hexPair);
 		}
 		catch (std::exception& e) {}
 	}
@@ -150,4 +150,42 @@ std::string trim(const std::string& str) {
 	}
 
 	return str.substr(first, last - first + 1);
+}
+
+
+__int32 ConvertLittleEndianToInt32(char* data)
+{
+	bool littleEndian = IsLittleEndian();
+	if (littleEndian) {
+		return (static_cast<uint8_t>(data[0]) |
+			(static_cast<uint8_t>(data[1]) << 8) |
+			(static_cast<uint8_t>(data[2]) << 16) |
+			(static_cast<uint8_t>(data[3]) << 24));
+	}
+	else {
+		return (static_cast<uint8_t>(data[3]) |
+			(static_cast<uint8_t>(data[2]) << 8) |
+			(static_cast<uint8_t>(data[1]) << 16) |
+			(static_cast<uint8_t>(data[0]) << 24));
+	}
+}
+
+
+std::string bufferToString(const char* buffer, size_t bufferSize) {
+	// Find the null character within the specified bounds
+	size_t nullPos = 0;
+	while (nullPos < bufferSize && buffer[nullPos] != '\0') {
+		++nullPos;
+	}
+
+	// Check if a null character was found
+	if (nullPos < bufferSize) {
+		// Use the string constructor to create an std::string
+		return std::string(buffer, nullPos);
+	}
+	else {
+		// Null character not found within bounds
+		std::cerr << "Error: Null character not found within the specified bounds." << std::endl;
+		return std::string();  // Return an empty string on failure
+	}
 }

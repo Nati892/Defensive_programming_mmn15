@@ -115,7 +115,7 @@ def HandleClientRegistration(context:ClientContext):
             SendMessage(context,ServerMessageType.register_failure_response,0,None) 
     elif Messsage.code == ClientMessageType.reconnect_request:#if client wants to reconnect
         if CanReconnectClient(Messsage.Payload,Messsage.ID):
-            context.ID=Messsage.ID
+            context.ID=Messsage.ID.bytes
             context.PubKey= GetPubKey(context)
             AESKey = CryptoWrapper.random_aes_key()#create aes key 
             context.AESKey=AESKey#save in context
@@ -124,7 +124,7 @@ def HandleClientRegistration(context:ClientContext):
             db_instance.set_user_aes_key(Messsage.ID, AESKey)
             #encrypt key and send it
             encryptedAESKey=CryptoWrapper.rsa_encryption( context.PubKey,AESKey)
-            payload=context.ID.bytes+encryptedAESKey
+            payload=context.ID+encryptedAESKey
             SendMessage(context,ServerMessageType.reconnect_allowed_sending_aes_key,len(payload),payload)
             registered= True
         else:
@@ -172,6 +172,48 @@ def HandlePubKey(context:ClientContext,msg:ClientMessage):
 def GetPubKey(context:ClientContext):
     db_instance =DBWrapper.ThreadSafeSQLite()
     return db_instance.get_user_pub_key(context)
+
+def GetClientFile(Context:ClientContext):
+    #get client message file, and check crc stuff loop 
+    msg =ReceiveMesssage(Context)# get the file msg
+    if not msg.code==ClientMessageType.send_file_request:
+        SendGeneralError(Context);
+    
+    try:
+        byte_array = msg.Payload[:4]
+        msg.Payload=msg.Payload[4:]
+        integer_value = int.from_bytes(byte_array, byteorder='little')
+        
+        FileNameArr=msg.Payload[:255]
+        msg.Payload=msg.Payload[255:]
+        
+        string_data = FileNameArr.decode('ascii', errors='ignore')
+
+                    # Cut the string at the position of the null byte
+        FileName = string_data.split('\x00')[0]
+        filedata =  CryptoWrapper.aes_decryption(Context.AESKey,msg.Payload)
+        FileCRC =cksum.memcrc(filedata)
+        SendCRC(Context,len(msg.Payload),FileName,FileCRC)
+    except Exception as e:
+        SendGeneralError(Context);
+        return
+        
+
+def SendCRC(context:ClientContext,ContentSize:int,FileName:bytes,crc:int ):
+    DataToSend:bytes = bytes(context.ID)
+    
+    ContentSize_bytes = struct.pack('<I', ContentSize)
+    DataToSend=DataToSend+ContentSize_bytes
+    
+    padded_name_bytes =str.encode( FileName.ljust(255, "\0"))
+    for b in padded_name_bytes:
+        print(b)
+    DataToSend=DataToSend+padded_name_bytes
+    
+    crc_bytes = struct.pack('<I', crc)
+    DataToSend=DataToSend+crc_bytes
+    SendMessage(context,ServerMessageType.file_received_sending_crc_checksum,len(DataToSend),DataToSend)
+    pass
     
     # recieve message in context
 def ReceiveMesssage(context:ClientContext):
@@ -203,28 +245,6 @@ def ReceiveMesssage(context:ClientContext):
     return Request
 
 
-def GetClientFile(Context:ClientContext):
-    #get client message file, and check crc stuff loop 
-    msg =ReceiveMesssage(Context)# get the file msg
-    if not msg.code==ClientMessageType.send_file_request:
-        SendGeneralError(Context);
-    
-    byte_array = msg.Payload[:4]
-    msg.Payload=msg.Payload[4:]
-    integer_value = int.from_bytes(byte_array, byteorder='little')
-    
-    FileNameArr=msg.Payload[:255]
-    msg.Payload=msg.Payload[255:]
-    
-    string_data = FileNameArr.decode('ascii', errors='ignore')
-
-                # Cut the string at the position of the null byte
-    FileName = string_data.split('\x00')[0]
-    filedata =  CryptoWrapper.aes_decryption(Context.AESKey,msg.Payload)
-    FileCRC =cksum.memcrc(filedata)
-    pass
-
-
 #send message to client via context
 def SendMessage(context:ClientContext,MessageCode,bufferSize,buffer):
     Message:ServerMessage=ServerMessage(MessageCode,bufferSize,buffer)
@@ -242,7 +262,7 @@ def ReceiveData(soc:socket):
         else:
             if len(data) > 0:
                 print("debug: got data:" + str(len(data)))  # debug
-                Utils.print_dataArr(data)  # debug
+                #Utils.print_dataArr(data)  # debug
                 return data, len(data)
     except Exception as e:
         print(f"Error occurred while handling client: {e}")

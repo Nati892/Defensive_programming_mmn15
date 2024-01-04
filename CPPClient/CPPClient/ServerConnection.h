@@ -25,7 +25,7 @@ enum ClientMessageType :__int16
 	send_file_request = 1028,
 	correct_crc_code_response = 1029,
 	invalid_crc_code_response = 1030,
-	terminate_connect_invalid_crc_code_response = 1031,
+	invalid_crc_code_response_terminate_connection = 1031,
 };
 
 struct ClientRequestMessageHeader {
@@ -33,7 +33,7 @@ struct ClientRequestMessageHeader {
 	unsigned char version;
 	unsigned short Code;
 	unsigned int PayloadSize;
-	char* SerializeToBuffer( char* Payload, int PayloadSize, int* RetSize);
+	char* SerializeToBuffer(char* Payload, int PayloadSize, int* RetSize);
 };
 
 struct ServerResponseMessage

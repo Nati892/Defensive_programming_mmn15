@@ -14,23 +14,23 @@ void RunClient()
 	std::string* AESKey;
 	RSAPrivateWrapper* rsapriv;
 	int BuffSize = 0;
-	char* buff=nullptr;
+	char* buff = nullptr;
 	bool SendSuccess = false;
 	bool success_reg;
 	if (!IfFileExists(TRANSFER_FILE_PATH))
 	{
 		//error no transfer file. // Log and create sample file
-		//TODO log error:: transfer file doesnt exist, creating it
+		std::cerr << "warning: transfer file doesnt exist, creating example file" << std::endl;
 		auto file = CreateFileByPath(TRANSFER_FILE_PATH, true);
 		if (file == nullptr)
 		{
-			//TODO log error couldnt create file
+			std::cerr << "Error: cant create transfer file" << std::endl;
 			return;
 		}
 		if (!writeToFile(file, DEFAULT_TRANSFER_INFO_DATA, true))
 		{
+			std::cerr << "Error: writing to transfer file" << std::endl;
 			return;
-			//TODO log error:: couldnt write to transfer file
 		}
 	}
 	tInfo = parseTransferInfoFile(TRANSFER_FILE_PATH);
@@ -38,32 +38,34 @@ void RunClient()
 	instance = new ServerInstance(tInfo);
 	if (!instance->StartConnection())
 	{
-		//log error in connection
+		std::cerr << "error: Starting connecion with remote server" << std::endl;
 		delete instance;
 		return;
 	}
 
 	if (!IfFileExists(ME_FILE_PATH))
 	{//register
-		//log couldnt find the me.info file , registering
+		std::cerr << "info: couldnt find Me.info file, trying to register" << std::endl;
 		success_reg = RegisterClient(tInfo, instance, &MInfo, &AESKey, &rsapriv);
 	}
 	else
 	{//attempt re-register
-	 //auto MeInfoData =parse
+
+		std::cerr << "info: attempting reconnect with server" << std::endl;
 		success_reg = ReconnectClient(tInfo, instance, &MInfo, &AESKey, &rsapriv);
 	}
 
 	if (!success_reg)
 	{
-		std::cout << "failed to register or connect to server" << std::endl;
+		std::cout << "error: failed to register or connect to server" << std::endl;
 		return;
 	}
+	std::cerr << "info: register or reconnect successful" << std::endl;
 	std::string tmp(*AESKey);
 
 	if (!IfFileExists(tInfo.filePath))
 	{
-		std::cerr << "bad file path" << std::endl;
+		std::cerr << "error: bad transfer info file path" << std::endl;
 		return;
 	}
 
@@ -72,14 +74,121 @@ void RunClient()
 	bool ReadSuccess = readfile(tInfo.filePath, &FileBuff, &FileSize);
 	if (!ReadSuccess)
 	{
-		std::cerr << "error reading file data" << std::endl;
+		std::cerr << "error: reading file data" << std::endl;
 		return;
 	}
 	unsigned long CRCCode = memcrc(FileBuff, FileSize);
-	buff = CreateSendFileRequest(MInfo, tInfo, tmp, FileBuff, FileSize, &BuffSize);
+
+	//create the request once because its cpu expensive and keep in case of retries
+	int FileBuffSize = 0;
+	int EncFileSize = 0;
+	char* FileBuffRequest = CreateSendFileRequest(MInfo, tInfo, tmp, FileBuff, FileSize, &EncFileSize, &FileBuffSize);
+	delete FileBuff;
 	if (buff != nullptr && BuffSize > 0)
-		instance->SendBufferToServer(buff, BuffSize);
-	int dbgpoint = 0;
+	{
+		std::cerr << "error: creating send file request" << std::endl;
+		delete[] FileBuffRequest;
+		return;
+	}
+
+	bool CorrectCRCReceived = false;
+	for (int i = 0; i < 4 && !CorrectCRCReceived; i++)
+	{
+		std::cerr << "info: file send attempt - " << i << std::endl;
+		instance->SendBufferToServer(FileBuffRequest, FileBuffSize);//send file message
+
+		rec_msg = instance->RecieveMessageFromServer();//recieve response
+		if (rec_msg == nullptr)
+		{
+			std::cerr << "info: Recieving crc msg from server" << std::endl;
+			return;
+		}
+
+		if (rec_msg->Code == file_received_sending_crc_checksum && rec_msg->PayloadSize >= 279)//todo magic number
+		{
+			int offset = 0;
+			char rec_CleintId[16];
+			char rec_FileName[255];
+
+			std::memcpy(rec_CleintId, rec_msg->payload, CLIENT_ID_LENGTH);
+			offset += CLIENT_ID_LENGTH;
+
+			int rec_file_Size = ConvertLittleEndianToInt32(rec_msg->payload + offset);
+			offset += sizeof(int);
+
+			std::memcpy(rec_FileName, rec_msg->payload + offset, FILE_NAME_SIZE);
+			offset += FILE_NAME_SIZE;
+			std::string rec_FileNameStr = bufferToString(rec_FileName, FILE_NAME_SIZE);
+
+			unsigned long rec_crc = (unsigned long)ConvertLittleEndianToInt32(rec_msg->payload + offset);
+			offset += sizeof(int);
+			bool CID_check = std::memcmp(rec_CleintId, AsciiIdentifier(MInfo).c_str(), CLIENT_ID_LENGTH) == 0;
+			bool crcCodeCheck = rec_crc == CRCCode;
+			bool file_size_check = rec_file_Size == EncFileSize;
+			bool file_path_check = (rec_FileNameStr.size() > 0 && rec_FileNameStr == tInfo.filePath);
+			if (CID_check && crcCodeCheck && file_size_check && file_path_check)
+			{
+				CorrectCRCReceived = true;
+			}
+		}
+		else
+		{//send bad crc request
+			if (i == 3)//in case third time of resending
+				break;
+			int send_buff_size = 0;
+			char* sendCRCBuff = nullptr;
+			sendCRCBuff = CreateBadCRCRequestRetry(&MInfo, &send_buff_size, tInfo);
+			if (sendCRCBuff == nullptr || send_buff_size <= 0)
+			{
+				std::cerr << "Error: creating bad crc gotten from server response to server" << std::endl;
+				if (sendCRCBuff != nullptr)
+					delete[] sendCRCBuff;
+				delete FileBuffRequest;
+				return;
+			}
+			SendSuccess = instance->SendBufferToServer(sendCRCBuff, send_buff_size);
+			delete sendCRCBuff;
+
+			if (!SendSuccess)
+			{
+				std::cerr << "Error: creating bad crc gotten from server response to server" << std::endl;
+				delete FileBuffRequest;
+				return;
+			}
+
+
+		}
+		//finished send file loop
+		if (!CorrectCRCReceived)//if retried and nothing then send abort message
+		{
+			int send_buff_size = 0;
+			char* sendCRCBuff = nullptr;
+			sendCRCBuff = CreateBadCRCRequestTerminateConnection(&MInfo, &send_buff_size, tInfo);
+			if (sendCRCBuff == nullptr || send_buff_size <= 0)
+			{
+				std::cerr << "Error: creating bad crc gotten from server response to server" << std::endl;
+				if (sendCRCBuff != nullptr)
+					delete[] sendCRCBuff;
+				delete FileBuffRequest;
+				return;
+			}
+			SendSuccess = instance->SendBufferToServer(sendCRCBuff, send_buff_size);
+			delete sendCRCBuff;
+
+			if (!SendSuccess)
+			{
+				std::cerr << "Error: creating bad crc gotten from server response to server" << std::endl;
+				delete FileBuffRequest;
+				return;
+			}
+		}
+
+
+
+
+
+
+	}
 
 	//add file send, crc and loop for crc. and go through todos
 
@@ -227,6 +336,7 @@ bool ReconnectClient(TransferInfo TInfo, ServerInstance* server, MeInfo* MInfo_o
 	success = true;
 	return success;
 }
+
 char* CreateReconnectRequest(MeInfo* MInfo, int* RetSize)
 {
 	char* ReturnedBuff = nullptr;
@@ -251,7 +361,6 @@ char* CreateRegisterRequest(MeInfo* MInfo, int* RetSize)
 	return ReturnedBuff;
 }
 
-
 char* CreateSendPubKeyRequest(MeInfo* MInfo, int* RetSize, std::string pubkey)
 {
 	char* ReturnedBuff = nullptr;
@@ -269,12 +378,11 @@ char* CreateSendPubKeyRequest(MeInfo* MInfo, int* RetSize, std::string pubkey)
 	return ReturnedBuff;
 }
 
-
-char* CreateSendFileRequest(MeInfo MInfo, TransferInfo TInfo, std::string AESKey, char* FileData, int FileSize, int* RetSize)
+char* CreateSendFileRequest(MeInfo MInfo, TransferInfo TInfo, std::string AESKey, char* FileData, int FileSize, int* EncFileSize_out, int* RetSize_out)
 {
 	char* ReturnedBuff;
 	char* buff = nullptr;
-	*RetSize = 0;
+	*RetSize_out = 0;
 
 	//encrypt file
 	unsigned char aeskey[AESWrapper::DEFAULT_KEYLENGTH];
@@ -282,11 +390,14 @@ char* CreateSendFileRequest(MeInfo MInfo, TransferInfo TInfo, std::string AESKey
 	AESWrapper aesEncryptor(aeskey, AESWrapper::DEFAULT_KEYLENGTH);
 	std::string EncryptedFile = aesEncryptor.encrypt(FileData, FileSize);
 
+	int EncFileSize = EncryptedFile.size();
+	*EncFileSize_out = EncFileSize;
 	//calc payload size
-	auto PayloadSize = sizeof(int) + FILE_NAME_SIZE + EncryptedFile.size();
+	auto PayloadSize = sizeof(int) + FILE_NAME_SIZE + EncFileSize;
 	buff = new char[PayloadSize];
+	std::memset(buff, 0, PayloadSize);
 
-	char* FileSizeLength = ConvertInt32ToEndian(PayloadSize);//4 bytes of file size length
+	char* FileSizeLength = ConvertInt32ToEndian(EncFileSize);//4 bytes of file size length
 	char file_name[FILE_NAME_SIZE];//file size
 
 	//copy size
@@ -308,9 +419,59 @@ char* CreateSendFileRequest(MeInfo MInfo, TransferInfo TInfo, std::string AESKey
 	h.Code = send_file_request;
 	h.version = CLIENT_VERSION;
 	h.PayloadSize = PayloadSize;
-	ReturnedBuff = h.SerializeToBuffer(buff, h.PayloadSize, RetSize);
+	ReturnedBuff = h.SerializeToBuffer(buff, h.PayloadSize, RetSize_out);
 	//	delete FileSizeLength;//crashing for some reason
 
 	return ReturnedBuff;
 }
 
+char* CreateBadCRCRequestRetry(MeInfo* MInfo, int* RetSize, TransferInfo Tinfo)
+{
+	char* ReturnedBuff = nullptr;
+	ClientRequestMessageHeader h;
+	auto tmp = AsciiIdentifier(*MInfo);
+	std::memcpy(h.ClientID, tmp.data(), CLIENT_ID_LENGTH);
+	h.Code = invalid_crc_code_response;
+	h.version = CLIENT_VERSION;
+	h.PayloadSize = FILE_NAME_SIZE;
+	char payload[FILE_NAME_SIZE];//create payload buffer
+	std::memset(payload, 0, FILE_NAME_SIZE);
+	std::memcpy(payload, Tinfo.filePath.data(), Tinfo.filePath.size());//copy name
+
+	ReturnedBuff = h.SerializeToBuffer(payload, SendPubKeyRequestPayloadSize, RetSize);
+	return ReturnedBuff;
+}
+
+char* CreateCorrectRCRRequestRetry(MeInfo* MInfo, int* RetSize, TransferInfo Tinfo)
+{
+	char* ReturnedBuff = nullptr;
+	ClientRequestMessageHeader h;
+	auto tmp = AsciiIdentifier(*MInfo);
+	std::memcpy(h.ClientID, tmp.data(), CLIENT_ID_LENGTH);
+	h.Code = correct_crc_code_response;
+	h.version = CLIENT_VERSION;
+	h.PayloadSize = FILE_NAME_SIZE;
+	char payload[FILE_NAME_SIZE];//create payload buffer
+	std::memset(payload, 0, FILE_NAME_SIZE);
+	std::memcpy(payload, Tinfo.filePath.data(), Tinfo.filePath.size());//copy name
+
+	ReturnedBuff = h.SerializeToBuffer(payload, SendPubKeyRequestPayloadSize, RetSize);
+	return ReturnedBuff;
+}
+
+char* CreateBadCRCRequestTerminateConnection(MeInfo* MInfo, int* RetSize, TransferInfo Tinfo)
+{
+	char* ReturnedBuff = nullptr;
+	ClientRequestMessageHeader h;
+	auto tmp = AsciiIdentifier(*MInfo);
+	std::memcpy(h.ClientID, tmp.data(), CLIENT_ID_LENGTH);
+	h.Code = invalid_crc_code_response_terminate_connection;
+	h.version = CLIENT_VERSION;
+	h.PayloadSize = FILE_NAME_SIZE;
+	char payload[FILE_NAME_SIZE];//create payload buffer
+	std::memset(payload, 0, FILE_NAME_SIZE);
+	std::memcpy(payload, Tinfo.filePath.data(), Tinfo.filePath.size());//copy name
+
+	ReturnedBuff = h.SerializeToBuffer(payload, SendPubKeyRequestPayloadSize, RetSize);
+	return ReturnedBuff;
+}

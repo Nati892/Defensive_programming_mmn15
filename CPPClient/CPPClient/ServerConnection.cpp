@@ -111,6 +111,7 @@ ServerResponseMessage* ServerInstance::RecieveMessageFromServer()
 	int rec_buffer_left_size = BUFFER_SIZE;
 	int rec_buffer_left_index = 0;
 	char receivedBuffer[BUFFER_SIZE];  // Assuming a buffer of size BUFFER_SIZE
+	bool connectionOpen = true;
 
 	if (this->SavedDataBufferSize > 0)//if there is stored data from last message
 	{
@@ -120,12 +121,21 @@ ServerResponseMessage* ServerInstance::RecieveMessageFromServer()
 	}
 	while (BytesToRead < SERVER_MESSAGE_HEADER_SIZE && rec_buffer_left_size>0)//get header size at least, this loop fills up buff until it reaches at least the header size
 	{
-		BytesToRead += recv(*(this->clientSocket), receivedBuffer + (BUFFER_SIZE - rec_buffer_left_size), rec_buffer_left_size, 0);
-		if (BytesToRead < 0)
+		if (!connectionOpen)
 		{
+			std::cerr << "error: connection with server closed when starting to recv header data" << std::endl;
 			return nullptr;
 		}
-		rec_buffer_left_size -= BytesToRead;
+		int tmp = recv(*(this->clientSocket), receivedBuffer + (BUFFER_SIZE - rec_buffer_left_size), rec_buffer_left_size, 0);
+		if (tmp <= 0)
+		{
+			connectionOpen = false;
+		}
+		else
+		{
+			BytesToRead += tmp;
+			rec_buffer_left_size -= BytesToRead;
+		}
 	}
 	ServerResponseMessage* header = new ServerResponseMessage;
 
@@ -175,14 +185,20 @@ ServerResponseMessage* ServerInstance::RecieveMessageFromServer()
 		else//if buffer is empty then recv and re-loop
 		{
 			BytesToRead = 0;
-			BytesToRead += recv(*(this->clientSocket), receivedBuffer, BUFFER_SIZE, 0);
-			if (BytesToRead < 0)
-			{
+			int tmp = 0;
+			tmp = recv(*(this->clientSocket), receivedBuffer, BUFFER_SIZE, 0);
+			if (tmp <= 0)
+			{//return here because there was an error recieving the message payload, so it is an error
+				std::cerr << "error receiving msg data, connection closed with server" << std::endl;
 				delete[] Payload;
 				delete header;
 				return nullptr;
 			}
-			rec_buffer_left_index = 0;
+			else
+			{
+				BytesToRead += tmp;
+				rec_buffer_left_index = 0;
+			}
 		}
 	}
 	if (BytesToRead > 0)//if there is still data from the next message, store it and use it next time

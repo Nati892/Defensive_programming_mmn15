@@ -177,7 +177,7 @@ class ThreadSafeSQLite:
             self._connect()
             try:
                 # Assuming PublicKey is the column name in your table
-                self._cursor.execute("SELECT PublicKey FROM clients WHERE ID=?", (context.ID.bytes,))
+                self._cursor.execute("SELECT PublicKey FROM clients WHERE ID=?", (context.ID,))
                 result = self._cursor.fetchone()
                 if result:
                     pub_key = result[0]
