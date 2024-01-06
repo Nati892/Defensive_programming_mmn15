@@ -33,7 +33,12 @@ void RunClient()
 			return;
 		}
 	}
+
 	tInfo = parseTransferInfoFile(TRANSFER_FILE_PATH);
+	std::cerr << "info: Read trasfer file" << std::endl;
+	std::cerr << "info: client: " << tInfo.ClientName << std::endl;
+	std::cerr << "info: file name " << tInfo.filePath << std::endl;
+	
 	//create server isntance based on files
 	instance = new ServerInstance(tInfo);
 	if (!instance->StartConnection())
@@ -42,6 +47,7 @@ void RunClient()
 		delete instance;
 		return;
 	}
+	std::cerr << "info: server connection started" << std::endl;
 
 	if (!IfFileExists(ME_FILE_PATH))
 	{//register
@@ -94,7 +100,7 @@ void RunClient()
 	bool CorrectCRCReceived = false;
 	for (int i = 0; i < 4 && !CorrectCRCReceived; i++)
 	{
-		std::cerr << "info: file send attempt - " << i << std::endl;
+		std::cerr << "info: file send attempt - " << i+1 << std::endl;
 		instance->SendBufferToServer(FileBuffRequest, FileBuffSize);//send file message
 
 		rec_msg = instance->RecieveMessageFromServer();//recieve response
@@ -129,6 +135,8 @@ void RunClient()
 			if (CID_check && crcCodeCheck && file_size_check && file_path_check)
 			{
 				CorrectCRCReceived = true;
+				std::cerr << "info: file send success!" << std::endl;
+				std::cerr << "info: crc checksum success!" << std::endl;
 			}
 		}
 		else
@@ -206,7 +214,7 @@ void RunClient()
 		}
 
 		rec_msg = instance->RecieveMessageFromServer();
-		if (rec_msg==nullptr || rec_msg->Code != message_received)
+		if (rec_msg == nullptr || rec_msg->Code != message_received)
 		{
 			std::cerr << "Warning: missing message received from server" << std::endl;
 		}
@@ -282,7 +290,7 @@ bool RegisterClient(TransferInfo TInfo, ServerInstance* server, MeInfo* MInfo_ou
 		return false;
 	}
 	//check client id to be good
-
+	std::cerr << "info: register success!, received aes key" << std::endl;
 	int keylen = rec_msg->PayloadSize - CLIENT_ID_LENGTH;
 	char* Enc_AES_Key = new char[keylen];
 	std::memcpy(Enc_AES_Key, rec_msg->payload + CLIENT_ID_LENGTH, keylen);
@@ -342,7 +350,7 @@ bool ReconnectClient(TransferInfo TInfo, ServerInstance* server, MeInfo* MInfo_o
 		std::cerr << ("debug: reconnect failed! wrong client id") << std::endl;
 		return false;
 	}
-
+	std::cerr << "info: Reconnect success received AES Key" << std::endl;
 	int keylen = rec_msg->PayloadSize - CLIENT_ID_LENGTH;
 	char* Enc_AES_Key = new char[keylen];
 	std::memcpy(Enc_AES_Key, rec_msg->payload + CLIENT_ID_LENGTH, keylen);

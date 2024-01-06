@@ -86,12 +86,12 @@ bool ServerInstance::SendBufferToServer(const char* BuffToSend, int size)
 			std::cerr << "Failed to send data to the server." << std::endl;
 		}
 		else {
-			std::cerr << "Message sent to the server" << std::endl;
+			std::cerr << "Debug: Message sent to the server" << std::endl;
 			success = true;
 		}
 	}
 	catch (const std::exception& e) {
-		std::cerr << "Error sending message" << std::endl;
+		std::cerr << "Error: sending message" << std::endl;
 		success = false;
 	}
 

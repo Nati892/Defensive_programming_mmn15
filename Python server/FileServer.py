@@ -79,8 +79,10 @@ class Server:
             if not IsClientRegistered:
                 print("client registration failed")
                 return;
-            
+            print("register/reconnect success")
+            print("receiving file")
             handleReceiveFile(Context)
+        print("Done with client object")
                     
 
 #this func makes sure the client is registered either first time registration or reconnection
@@ -190,6 +192,7 @@ def handleReceiveFile(Context:ClientContext):
             print("error with client socket")
             return False;
         if ClientMsg.code== ClientMessageType.correct_crc_code_response:
+            print("correct crc response from client")
             FileSendDone=SaveFile(Context,RecFileName, RecFileData)
             if(not FileSendDone):
                 SendGeneralError(Context)
@@ -251,8 +254,6 @@ def SendCRC(context:ClientContext,ContentSize:int,FileName:bytes,crc:int ):
     DataToSend=DataToSend+ContentSize_bytes
     
     padded_name_bytes =str.encode( FileName.ljust(255, "\0"))
-    for b in padded_name_bytes:
-        print(b)
     DataToSend=DataToSend+padded_name_bytes
     
     crc_bytes = struct.pack('<I', crc)
@@ -311,7 +312,6 @@ def ReceiveData(soc:socket):
             return b"", 0
         else:
             if len(data) > 0:
-                print("debug: got data:" + str(len(data)))  # debug
                 #Utils.print_dataArr(data)  # debug
                 return data, len(data)
     except Exception as e:
@@ -330,8 +330,6 @@ def SendData(soc:socket, data:bytes):
             encoded_data = data
 
         try:
-            print("debug len:")
-            print ( len(encoded_data))
             soc.send(encoded_data)
         except:
             print("failed to send message to socket, socket closed")
@@ -343,4 +341,5 @@ def SendData(soc:socket, data:bytes):
         return False
 
 def SendGeneralError(context:ClientContext):
+    print("sending error message to client")
     SendMessage(context,ServerMessageType.general_error,0,None)
