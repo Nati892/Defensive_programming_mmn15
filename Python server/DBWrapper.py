@@ -1,4 +1,5 @@
 
+import os
 import sqlite3
 import threading
 import sqlite3
@@ -6,13 +7,16 @@ import threading
 import uuid
 from datetime import datetime
 
+from Client import ClientContext
+
 class ThreadSafeSQLite:
     _instance = None
     _lock = threading.Lock()
 
     def __new__(cls, *args, **kwargs):
         with cls._lock:
-            if not cls._instance:
+            NoExist=os.path.isfile("defensive.db")
+            if not cls._instance or NoExist:
                 cls._instance = super().__new__(cls)
                 cls._instance._connection = None
                 cls._instance._cursor = None
@@ -71,7 +75,7 @@ class ThreadSafeSQLite:
         if not files_table_exists:
             self._cursor.execute("""
                 CREATE TABLE files (
-                    ID TEXT(16) PRIMARY KEY,
+                    ID TEXT(16),
                     FileName TEXT(255),
                     PathName TEXT(255),
                     Verified BOOLEAN
@@ -122,16 +126,51 @@ class ThreadSafeSQLite:
                 self._disconnect()
                 return user_id
 
-    def user_name_exists(self, name):
+    def create_userfile(self,context:ClientContext, FileName):
+        user_id=context.ID.hex()
+        FilePath:str=user_id+"/"+FileName
         with self._lock:
             self._connect()
             try:
-                self._cursor.execute("SELECT COUNT(*) FROM clients WHERE Name=?", (name,))
+                self._cursor.execute("INSERT INTO files (ID, FileName,PathName,Verified) VALUES (?, ?, ?, ?)", (context.ID, FileName,FilePath,True))
+                self._connection.commit()
+            #make sure its created
+            except Exception as e:
+                self._disconnect()
+                return False
+            finally:
+                self._disconnect()
+        return self.file_exists(context.ID)>0
+           
+            
+            
+    def user_name_exists(self, name):
+        with self._lock:
+            string_data = name.decode('ascii', errors='ignore')
+            # Cut the string at the position of the null byte
+            string_cut_at_null = string_data.split('\x00')[0]
+            self._connect()
+            try:
+                self._cursor.execute("SELECT COUNT(*) FROM clients WHERE Name=?", (string_cut_at_null,))
                 count = self._cursor.fetchone()[0]
                 return count > 0
+            except Exception as e:
+                pass
             finally:
                 self._disconnect()
 
+    def file_exists(self,ID:bytes):
+        with self._lock:
+            self._connect()
+            try:
+                self._cursor.execute("SELECT COUNT(*) FROM files WHERE ID=?", (ID,))
+                count = self._cursor.fetchone()[0]
+                return count > 0
+            except Exception as e:
+                pass
+            finally:
+                self._disconnect()
+                
     def rsa_for_user_exists(self, name:bytes,cid:uuid):
         with self._lock:
             self._connect()
@@ -147,13 +186,16 @@ class ThreadSafeSQLite:
                 pass
             finally:
                 self._disconnect()
-    def update_user_last_seen(self, name):
+                
+    def update_user_last_seen(self, Context:ClientContext):
         with self._lock:
             self._connect()
             try:
                 now=datetime.now()
-                self._cursor.execute("UPDATE clients SET LastSeen=? WHERE Name=?", (now, name))
+                self._cursor.execute("UPDATE clients SET LastSeen=? WHERE ID=?", (now, Context.ID))
                 self._connection.commit()
+            except Exception as e:
+                pass
             finally:
                 self._disconnect()
                 
@@ -171,6 +213,7 @@ class ThreadSafeSQLite:
             finally:
                 self._disconnect()                
         return success
+    
     
     def get_user_pub_key(self, context):
         with self._lock:

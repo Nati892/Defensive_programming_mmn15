@@ -36,7 +36,7 @@ class ServerMessage:
     code:int=0
     PayloadSize:int=0
     Payload:bytes=0
-    def __init__(self,code,payloadSize,payload):
+    def __init__(self,code,payloadSize:int,payload:bytes):
         self.Version=Globals.SERVER_VERSION
         self.code=code
         self.PayloadSize=payloadSize

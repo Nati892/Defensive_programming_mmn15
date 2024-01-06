@@ -76,8 +76,12 @@ class Server:
         Context.soc=client_socket
         with Context.soc:
             IsClientRegistered=HandleClientRegistration(Context)
-            if IsClientRegistered:
-                GetClientFile(Context)
+            if not IsClientRegistered:
+                print("client registration failed")
+                return;
+            
+            handleReceiveFile(Context)
+                    
 
 #this func makes sure the client is registered either first time registration or reconnection
 def HandleClientRegistration(context:ClientContext):
@@ -91,10 +95,13 @@ def HandleClientRegistration(context:ClientContext):
             if(ClientId==None):
                 SendMessage(context,ServerMessageType.general_error,0,None)
             else:#successful registration
+                context.ID=ClientId
                 payload:bytes= ClientId
                 SendMessage(context,ServerMessageType.register_success_response,len(payload),payload)
                 
                 Messsage =ReceiveMesssage(context)
+                if Messsage==None:
+                    return False
                 if Messsage.code!=ClientMessageType.send_public_key_request:
                     SendMessage(context,ServerMessageType.general_error,0,None)
                     return
@@ -114,8 +121,8 @@ def HandleClientRegistration(context:ClientContext):
         else:
             SendMessage(context,ServerMessageType.register_failure_response,0,None) 
     elif Messsage.code == ClientMessageType.reconnect_request:#if client wants to reconnect
+        context.ID=Messsage.ID.bytes
         if CanReconnectClient(Messsage.Payload,Messsage.ID):
-            context.ID=Messsage.ID.bytes
             context.PubKey= GetPubKey(context)
             AESKey = CryptoWrapper.random_aes_key()#create aes key 
             context.AESKey=AESKey#save in context
@@ -128,7 +135,7 @@ def HandleClientRegistration(context:ClientContext):
             SendMessage(context,ServerMessageType.reconnect_allowed_sending_aes_key,len(payload),payload)
             registered= True
         else:
-            SendMessage(context,ServerMessageType.reconnect_denied,context.ID,len(context.ID))
+            SendMessage(context,ServerMessageType.reconnect_denied,len(context.ID),context.ID)
             registered= False
     else:
         SendMessage(context,ServerMessageType.general_error,0,None)
@@ -173,12 +180,34 @@ def GetPubKey(context:ClientContext):
     db_instance =DBWrapper.ThreadSafeSQLite()
     return db_instance.get_user_pub_key(context)
 
+
+def handleReceiveFile(Context:ClientContext):
+    FileSendDone=False
+    while not FileSendDone:
+        RecFileName, RecFileData, RecCRC = GetClientFile(Context)    
+        ClientMsg=ReceiveMesssage(Context)
+        if ClientMessage is None:
+            print("error with client socket")
+            return False;
+        if ClientMsg.code== ClientMessageType.correct_crc_code_response:
+            FileSendDone=SaveFile(Context,RecFileName, RecFileData)
+            if(not FileSendDone):
+                SendGeneralError(Context)
+            else:
+                SendOkMessage(Context);
+            FileSendDone=True
+        elif ClientMsg.code == ClientMessageType.terminate_connect_invalid_crc_code_response:
+            FileSendDone=True
+            SendOkMessage(Context);
+    pass
+        
 def GetClientFile(Context:ClientContext):
     #get client message file, and check crc stuff loop 
     msg =ReceiveMesssage(Context)# get the file msg
+    if msg ==None:
+        return False
     if not msg.code==ClientMessageType.send_file_request:
         SendGeneralError(Context);
-    
     try:
         byte_array = msg.Payload[:4]
         msg.Payload=msg.Payload[4:]
@@ -196,8 +225,24 @@ def GetClientFile(Context:ClientContext):
         SendCRC(Context,len(msg.Payload),FileName,FileCRC)
     except Exception as e:
         SendGeneralError(Context);
-        return
+    return FileName,filedata,FileCRC
         
+def SaveFile(Context:ClientContext,RecFileName:str, RecFileData:bytes):
+    success:bool =False
+    #db save
+    db_instance =DBWrapper.ThreadSafeSQLite()
+    if not db_instance.create_userfile(Context,RecFileName):
+        #clean file and send general error
+        return False
+    else:
+        Created=Utils.CreateUserFile(Context,RecFileName,RecFileData)
+        if(Created):
+            if not Created:
+                Utils.DeleteUserFile(Context,RecFileName)            
+            else:
+                success=True;
+    return success
+    #file save
 
 def SendCRC(context:ClientContext,ContentSize:int,FileName:bytes,crc:int ):
     DataToSend:bytes = bytes(context.ID)
@@ -213,7 +258,6 @@ def SendCRC(context:ClientContext,ContentSize:int,FileName:bytes,crc:int ):
     crc_bytes = struct.pack('<I', crc)
     DataToSend=DataToSend+crc_bytes
     SendMessage(context,ServerMessageType.file_received_sending_crc_checksum,len(DataToSend),DataToSend)
-    pass
     
     # recieve message in context
 def ReceiveMesssage(context:ClientContext):
@@ -242,9 +286,15 @@ def ReceiveMesssage(context:ClientContext):
     Request.Payload = context.BufferedData[:Request.PayloadSize]
     # Remove the extracted bytes from the buffer
     context.BufferedData = context.BufferedData[Request.PayloadSize:]
+    
+    db_instance =DBWrapper.ThreadSafeSQLite()
+    db_instance.update_user_last_seen(context)
     return Request
 
-
+def SendOkMessage(Context):
+    DataToSend:bytes = bytes(Context.ID)
+    SendMessage(Context,ServerMessageType.message_received,len(DataToSend),DataToSend)
+    
 #send message to client via context
 def SendMessage(context:ClientContext,MessageCode,bufferSize,buffer):
     Message:ServerMessage=ServerMessage(MessageCode,bufferSize,buffer)

@@ -104,7 +104,7 @@ void RunClient()
 			return;
 		}
 
-		if (rec_msg->Code == file_received_sending_crc_checksum && rec_msg->PayloadSize >= 279)//todo magic number
+		if (rec_msg->Code == file_received_sending_crc_checksum && rec_msg->PayloadSize >= SendCRCChecksumReqBuffSize)
 		{
 			int offset = 0;
 			char rec_CleintId[16];
@@ -147,53 +147,71 @@ void RunClient()
 				return;
 			}
 			SendSuccess = instance->SendBufferToServer(sendCRCBuff, send_buff_size);
-			delete sendCRCBuff;
+			delete[] sendCRCBuff;
 
 			if (!SendSuccess)
 			{
 				std::cerr << "Error: creating bad crc gotten from server response to server" << std::endl;
-				delete FileBuffRequest;
+				delete[] FileBuffRequest;
 				return;
 			}
 
 
 		}
+		//cleanup old stuff
+		delete[] FileBuffRequest;
+		delete rec_msg;
+
+		//sned final result for crc checksum
+		int send_buff_size = 0;
+		char* sendCRCBuff = nullptr;
 		//finished send file loop
 		if (!CorrectCRCReceived)//if retried and nothing then send abort message
 		{
-			int send_buff_size = 0;
-			char* sendCRCBuff = nullptr;
 			sendCRCBuff = CreateBadCRCRequestTerminateConnection(&MInfo, &send_buff_size, tInfo);
 			if (sendCRCBuff == nullptr || send_buff_size <= 0)
 			{
 				std::cerr << "Error: creating bad crc gotten from server response to server" << std::endl;
 				if (sendCRCBuff != nullptr)
 					delete[] sendCRCBuff;
-				delete FileBuffRequest;
 				return;
 			}
 			SendSuccess = instance->SendBufferToServer(sendCRCBuff, send_buff_size);
-			delete sendCRCBuff;
+			delete[] sendCRCBuff;
 
 			if (!SendSuccess)
 			{
 				std::cerr << "Error: creating bad crc gotten from server response to server" << std::endl;
-				delete FileBuffRequest;
+				return;
+			}
+		}
+		else
+		{
+			sendCRCBuff = CreateCorrectRCRRequestRetry(&MInfo, &send_buff_size, tInfo);
+			if (sendCRCBuff == nullptr || send_buff_size <= 0)
+			{
+				std::cerr << "Error: creating bad crc gotten from server response to server" << std::endl;
+				if (sendCRCBuff != nullptr)
+					delete[] sendCRCBuff;
+				return;
+			}
+			SendSuccess = instance->SendBufferToServer(sendCRCBuff, send_buff_size);
+			delete[] sendCRCBuff;
+
+			if (!SendSuccess)
+			{
+				std::cerr << "Error: creating bad crc gotten from server response to server" << std::endl;
 				return;
 			}
 		}
 
-
-
-
-
-
+		rec_msg = instance->RecieveMessageFromServer();
+		if (rec_msg==nullptr || rec_msg->Code != message_received)
+		{
+			std::cerr << "Warning: missing message received from server" << std::endl;
+		}
+		std::cerr << "info: client exiting" << std::endl;
 	}
-
-	//add file send, crc and loop for crc. and go through todos
-
-
-
 
 }
 
@@ -212,7 +230,7 @@ bool RegisterClient(TransferInfo TInfo, ServerInstance* server, MeInfo* MInfo_ou
 	buff = CreateRegisterRequest(MInfo, &BuffSize);
 	if (BuffSize == 0 || buff == nullptr)
 	{
-		//TODO bad register request
+		std::cerr << "Error: bad register request created" << std::endl;
 		return false;
 	}
 	SendSuccess = instance->SendBufferToServer(buff, BuffSize);
@@ -220,7 +238,7 @@ bool RegisterClient(TransferInfo TInfo, ServerInstance* server, MeInfo* MInfo_ou
 	rec_msg = instance->RecieveMessageFromServer();
 	if (rec_msg == nullptr || rec_msg->Code != register_success_response || rec_msg->PayloadSize != CLIENT_ID_LENGTH)
 	{
-		//todo failed to register bye bye
+		std::cerr << "Warning: server rejected registe request" << std::endl;
 		std::cerr << ("debug: register failed!") << std::endl;
 		return false;
 	}
@@ -255,15 +273,12 @@ bool RegisterClient(TransferInfo TInfo, ServerInstance* server, MeInfo* MInfo_ou
 
 	if (rec_msg == nullptr || rec_msg->Code != pub_rsa_received_sending_encrypted_aes || rec_msg->PayloadSize < MIN_2102_PAYLOAD_SIZE)
 	{
-
-		//todo check client id 
-		//todo failed to register bye bye
-		std::cerr << ("debug: register failed!") << std::endl;
+		std::cerr << ("warning : register failed!") << std::endl;
 		return false;
 	}
 	if (!compareClientId(*MInfo, rec_msg->payload))
 	{
-		std::cerr << ("debug: register failed! wrong client id") << std::endl;
+		std::cerr << ("debug: register failed! wrong client id received from server") << std::endl;
 		return false;
 	}
 	//check client id to be good
@@ -290,17 +305,25 @@ bool ReconnectClient(TransferInfo TInfo, ServerInstance* server, MeInfo* MInfo_o
 	bool SendSuccess;
 	int BuffSize = 0;
 	char* buff;
+	RSAPrivateWrapper* rsapriv = nullptr;
 	if (KInfo->PrivKey.size() <= 0)
 	{
 		//handle error here
 	}
-	RSAPrivateWrapper* rsapriv = new RSAPrivateWrapper(KInfo->PrivKey);
-	//todo handle case file data is not good
+	try {
+		rsapriv = new RSAPrivateWrapper(KInfo->PrivKey);
+	}
+	catch (std::exception& e)
+	{
+		std::cerr << "warning: failed to create rsa codec from key in private.key file: " << e.what() << std::endl;
+		success = false;
+		return success;
+	}
 	//send reconnect request
 	buff = CreateReconnectRequest(MInfo, &BuffSize);
 	if (BuffSize == 0 || buff == nullptr)
 	{
-		//TODO bad register request
+		std::cerr << "Error: bad register request" << std::endl;
 		return false;
 	}
 	SendSuccess = instance->SendBufferToServer(buff, BuffSize);
@@ -309,24 +332,21 @@ bool ReconnectClient(TransferInfo TInfo, ServerInstance* server, MeInfo* MInfo_o
 	if (rec_msg == nullptr || rec_msg->Code != reconnect_allowed_sending_aes_key || rec_msg->PayloadSize < CLIENT_ID_LENGTH)
 	{
 
-		//todo check client id 
-		//todo failed to register bye bye
 		std::cerr << ("debug: reconnect failed! deleting Me.info and private key data to do a register on the next run") << std::endl;
 		deleteFile(ME_FILE_PATH);
 		deleteFile(PRIV_KEY_PATH);
-		return false;//todo re - register
+		return false;
 	}
 	if (!compareClientId(*MInfo, rec_msg->payload))
 	{
 		std::cerr << ("debug: reconnect failed! wrong client id") << std::endl;
-		return false;//todo re - register
+		return false;
 	}
 
 	int keylen = rec_msg->PayloadSize - CLIENT_ID_LENGTH;
 	char* Enc_AES_Key = new char[keylen];
 	std::memcpy(Enc_AES_Key, rec_msg->payload + CLIENT_ID_LENGTH, keylen);
 	std::string AESKey = rsapriv->decrypt(Enc_AES_Key, keylen);
-	//delete Enc_AES_Key; //todo check why crash
 	delete rec_msg;
 
 	*MInfo_out = *MInfo;
